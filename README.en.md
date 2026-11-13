@@ -34,6 +34,8 @@ Close Streaming Center, run `Uninstall.exe` in the `Plugin\ConsoleSmooth` folder
 
 ## Measurements (RTX 5080, GC573, 1080p)
 
+Comparison videos (quality, latency, Lossless Scaling) and settings window photos are in the [media](media/README.md) folder.
+
 | Input | Setting | Generated |
 |---|---|---|
 | Switch 2 (60 fps) | RIFE 2x → 120 fps | 99%+ |

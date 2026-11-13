@@ -34,6 +34,8 @@ Streaming Center를 닫고 `Plugin\ConsoleSmooth` 폴더의 `Uninstall.exe`를 �
 
 ## 측정값 (RTX 5080, GC573, FHD)
 
+비교 영상(화질·지연·Lossless Scaling)과 설정 창 사진은 [media](media/README.md) 폴더에 있습니다.
+
 | 입력 | 설정 | 생성 비율 |
 |---|---|---|
 | 스위치 2 (60fps) | RIFE 2배 → 120fps | 99% 이상 |
