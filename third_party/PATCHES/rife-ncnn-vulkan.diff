@@ -1,0 +1,542 @@
+diff --git a/src/rife.cpp b/src/rife.cpp
+index 66ce4c5..88d8b0f 100644
+--- a/src/rife.cpp
++++ b/src/rife.cpp
+@@ -4,6 +4,10 @@
+ 
+ #include <algorithm>
+ #include <vector>
++#include <string>
++#include <cstring>
++#include <cstdlib>
++#include <cstdio>
+ #include "benchmark.h"
+ 
+ #include "rife_preproc.comp.hex.h"
+@@ -23,8 +27,9 @@
+ #include "rife_ops.h"
+ 
+ DEFINE_LAYER_CREATOR(Warp)
++#include "rife_tagged_cache.h"
+ 
+-RIFE::RIFE(int gpuid, bool _tta_mode, bool _tta_temporal_mode, bool _uhd_mode, int _num_threads, bool _rife_v2, bool _rife_v4)
++RIFE::RIFE(int gpuid, bool _tta_mode, bool _tta_temporal_mode, bool _uhd_mode, int _num_threads, bool _rife_v2, bool _rife_v4, int _padding)
+ {
+     vkdev = gpuid == -1 ? 0 : ncnn::get_gpu_device(gpuid);
+ 
+@@ -44,13 +49,17 @@ RIFE::RIFE(int gpuid, bool _tta_mode, bool _tta_temporal_mode, bool _uhd_mode, i
+     num_threads = _num_threads;
+     rife_v2 = _rife_v2;
+     rife_v4 = _rife_v4;
++    padding = _padding;
+ }
+ 
+ RIFE::~RIFE()
+ {
++    delete tagged_cache;
+     // cleanup preprocess and postprocess pipeline
+     {
+         delete rife_preproc;
++        delete rife_preproc4;
++        delete rife_postproc4;
+         delete rife_postproc;
+         delete rife_flow_tta_avg;
+         delete rife_flow_tta_temporal_avg;
+@@ -78,46 +87,104 @@ RIFE::~RIFE()
+ }
+ 
+ #if _WIN32
+-static void load_param_model(ncnn::Net& net, const std::wstring& modeldir, const wchar_t* name)
++static int load_param_model(ncnn::Net& net, const std::wstring& modeldir, const wchar_t* name)
+ {
+-    wchar_t parampath[256];
+-    wchar_t modelpath[256];
+-    swprintf(parampath, 256, L"%s/%s.param", modeldir.c_str(), name);
+-    swprintf(modelpath, 256, L"%s/%s.bin", modeldir.c_str(), name);
+-
+-    {
+-        FILE* fp = _wfopen(parampath, L"rb");
+-        if (!fp)
+-        {
+-            fwprintf(stderr, L"_wfopen %ls failed\n", parampath);
+-        }
+-
+-        net.load_param(fp);
+-
+-        fclose(fp);
++    wchar_t parampath[256], modelpath[256];
++    swprintf(parampath,256,L"%ls/%ls.param",modeldir.c_str(),name);
++    swprintf(modelpath,256,L"%ls/%ls.bin",modeldir.c_str(),name);
++    FILE* fp=_wfopen(parampath,L"rb"); if(!fp)return -1;
++    int code=net.load_param(fp);fclose(fp);if(code)return code;
++    fp=_wfopen(modelpath,L"rb");if(!fp)return -1;
++    code=net.load_model(fp);fclose(fp);return code;
++}
++// RIFE v4 scale=0.5, as in the reference inference code (flow at half size, image
++// at full size). The unmodified flow network runs on half-size images; its final flow
++// (blob 327) and pre-sigmoid mask (blob 331) are concatenated into one output so the
++// extractor can stay in light mode. A weight-free tail network resizes them to full
++// size (flow values x2), then warps and blends the full-size images exactly like the
++// end of the export (warp_6/warp_7, mul_76/77, add_78).
++// Returns an empty string when the layout is not the RIFE 4.6 export.
++static std::string flow_half_head(const std::string& text,float scale)
++{
++    std::vector<std::vector<std::string>> lines;size_t pos=0;
++    while(pos<text.size()){
++        size_t end=text.find('\n',pos);if(end==std::string::npos)end=text.size();
++        std::vector<std::string> tok;size_t i=pos;
++        while(i<end){while(i<end&&(text[i]==' '||text[i]=='\r'||text[i]=='\t'))i++;size_t s=i;while(i<end&&text[i]!=' '&&text[i]!='\r'&&text[i]!='\t')i++;if(i>s)tok.push_back(text.substr(s,i-s));}
++        lines.push_back(tok);pos=end+1;
+     }
+-    {
+-        FILE* fp = _wfopen(modelpath, L"rb");
+-        if (!fp)
+-        {
+-            fwprintf(stderr, L"_wfopen %ls failed\n", modelpath);
++    if(lines.size()<3||lines[0].size()!=1||lines[1].size()!=2)return "";
++    int layers=0,blobs=0,found=0;
++    std::vector<std::vector<std::string>> out={lines[0],lines[1]};
++    for(size_t n=2;n<lines.size();n++){
++        auto t=lines[n];if(t.empty())continue;
++        if(t.size()==5&&t[0]=="Input"&&(t[1]=="in0"||t[1]=="in1")){
++            std::string full="cs_full_"+t[1];t[4]=full;out.push_back(t);
++            char sc[32];snprintf(sc,sizeof sc,"%.6e",scale);
++            out.push_back({"Interp","cs_half_"+t[1],"1","1",full,t[1],"0=2",std::string("1=")+sc,std::string("2=")+sc});
++            ++layers;++blobs;++found;continue;
+         }
+-
+-        net.load_model(fp);
+-
+-        fclose(fp);
++        if(t.size()==7&&t[0]=="Split"&&t[1]=="splitncnn_45"&&t[2]=="1"&&t[3]=="2"&&t[4]=="327"){t[3]="3";t.push_back("cs_flow");++blobs;++found;}
++        if(t.size()>=6&&t[0]=="Sigmoid"&&t[1]=="sigmoid_8"&&t[4]=="331"){
++            out.push_back({"Split","cs_split_mask","1","2","331","cs_mask_sig","cs_mask"});
++            t[4]="cs_mask_sig";++layers;blobs+=2;++found;
++        }
++        out.push_back(t);
+     }
++    if(found!=4)return "";
++    out.push_back({"Concat","cs_cat","2","1","cs_flow","cs_mask","cs_flowmask"});++layers;++blobs;
++    out[1][0]=std::to_string(atoi(out[1][0].c_str())+layers);out[1][1]=std::to_string(atoi(out[1][1].c_str())+blobs);
++    std::string s;for(auto& t:out){for(size_t i=0;i<t.size();i++){if(i)s+=' ';s+=t[i];}s+='\n';}
++    return s;
++}
++// 1.6.5: the flow scale is 0.5 (UHD) or 0.75 (QHD), so the flow network sees about FHD. The
++// up factor is written with enough digits that float rounding lands on the padded full size
++// (padding 128 at 0.75: 96k * 4/3 = 128k). A two-input (dynamic size) Interp crashed on Vulkan.
++static std::string flow_half_tail(float scale)
++{
++    char up[32];snprintf(up,sizeof up,"%.9e",1.0/scale);
++    return std::string("7767517\n19 22\n")+
++    "Input img0 0 1 img0\nInput img1 0 1 img1\nInput fm 0 1 fm\n"
++    "Interp up 1 1 fm fmu 0=2 1="+up+" 2="+up+"\n"
++    "Split split_fm 1 2 fmu fm0 fm1\n"
++    "Crop cflow 1 1 fm0 flowu -23309=1,0 -23310=1,4 -23311=1,0\n"
++    "Crop cmask 1 1 fm1 masku -23309=1,4 -23310=1,5 -23311=1,0\n"
++    "BinaryOp mul_flow 1 1 flowu flow 0=2 1=1 2="+up+"\n"
++    "Split split_flow 1 2 flow f0 f1\n"
++    "Crop crop0 1 1 f0 fa -23309=1,0 -23310=1,2 -23311=1,0\n"
++    "Crop crop1 1 1 f1 fb -23309=1,2 -23310=1,4 -23311=1,0\n"
++    "Sigmoid sig 1 1 masku m\n"
++    "Split split_m 1 2 m m0 m1\n"
++    "BinaryOp rsub 1 1 m1 mi 0=7 1=1 2=1.000000e+00\n"
++    "rife.Warp warp0 2 1 img0 fa w0\n"
++    "rife.Warp warp1 2 1 img1 fb w1\n"
++    "BinaryOp mul0 2 1 w0 m0 x0 0=2\n"
++    "BinaryOp mul1 2 1 w1 mi x1 0=2\n"
++    "BinaryOp add 2 1 x0 x1 out0 0=0\n";
++}
++static int load_flow_half(ncnn::Net& net,ncnn::Net& tail,const std::wstring& modeldir,float scale)
++{
++    wchar_t parampath[256],modelpath[256];
++    swprintf(parampath,256,L"%ls/flownet.param",modeldir.c_str());
++    swprintf(modelpath,256,L"%ls/flownet.bin",modeldir.c_str());
++    FILE* fp=_wfopen(parampath,L"rb");if(!fp)return -1;
++    std::string text;char block[65536];size_t n;while((n=fread(block,1,sizeof(block),fp))>0)text.append(block,n);fclose(fp);
++    std::string patched=flow_half_head(text,scale);
++    if(patched.empty())return -1;
++    int code=net.load_param_mem(patched.c_str());if(code)return code;
++    fp=_wfopen(modelpath,L"rb");if(!fp)return -1;
++    code=net.load_model(fp);fclose(fp);if(code)return code;
++    static const unsigned char none[16]={0};
++    std::string tailText=flow_half_tail(scale);
++    code=tail.load_param_mem(tailText.c_str());if(code)return code;
++    tail.load_model(none);return 0;
+ }
+ #else
+-static void load_param_model(ncnn::Net& net, const std::string& modeldir, const char* name)
++static int load_param_model(ncnn::Net& net, const std::string& modeldir, const char* name)
+ {
+-    char parampath[256];
+-    char modelpath[256];
+-    sprintf(parampath, "%s/%s.param", modeldir.c_str(), name);
+-    sprintf(modelpath, "%s/%s.bin", modeldir.c_str(), name);
+-
+-    net.load_param(parampath);
+-    net.load_model(modelpath);
++    std::string base=modeldir+"/"+name;
++    int code=net.load_param((base+".param").c_str());
++    return code?code:net.load_model((base+".bin").c_str());
+ }
+ #endif
+ 
+@@ -132,34 +199,37 @@ int RIFE::load(const std::string& modeldir)
+     opt.use_vulkan_compute = vkdev ? true : false;
+     opt.use_fp16_packed = vkdev ? true : false;
+     opt.use_fp16_storage = vkdev ? true : false;
+-    opt.use_fp16_arithmetic = false;
++    opt.use_fp16_arithmetic = fp16_arith && vkdev && vkdev->info.support_fp16_arithmetic();
+     opt.use_int8_storage = true;
+ 
+     flownet.opt = opt;
++    tailnet.opt = opt;
+     contextnet.opt = opt;
+     fusionnet.opt = opt;
+ 
+     flownet.set_vulkan_device(vkdev);
++    tailnet.set_vulkan_device(vkdev);
+     contextnet.set_vulkan_device(vkdev);
+     fusionnet.set_vulkan_device(vkdev);
+ 
+     flownet.register_custom_layer("rife.Warp", Warp_layer_creator);
++    tailnet.register_custom_layer("rife.Warp", Warp_layer_creator);
+     contextnet.register_custom_layer("rife.Warp", Warp_layer_creator);
+     fusionnet.register_custom_layer("rife.Warp", Warp_layer_creator);
+ 
+ #if _WIN32
+-    load_param_model(flownet, modeldir, L"flownet");
++    if(flow_half?(!rife_v4||load_flow_half(flownet, tailnet, modeldir, flow_scale)):load_param_model(flownet, modeldir, L"flownet"))return -1;
+     if (!rife_v4)
+     {
+-        load_param_model(contextnet, modeldir, L"contextnet");
+-        load_param_model(fusionnet, modeldir, L"fusionnet");
++        if(load_param_model(contextnet, modeldir, L"contextnet"))return -1;
++        if(load_param_model(fusionnet, modeldir, L"fusionnet"))return -1;
+     }
+ #else
+-    load_param_model(flownet, modeldir, "flownet");
++    if(load_param_model(flownet, modeldir, "flownet"))return -1;
+     if (!rife_v4)
+     {
+-        load_param_model(contextnet, modeldir, "contextnet");
+-        load_param_model(fusionnet, modeldir, "fusionnet");
++        if(load_param_model(contextnet, modeldir, "contextnet"))return -1;
++        if(load_param_model(fusionnet, modeldir, "fusionnet"))return -1;
+     }
+ #endif
+ 
+@@ -172,6 +242,8 @@ int RIFE::load(const std::string& modeldir)
+ #else
+         specializations[0].i = 0;
+ #endif
++        // Non-TTA pre/postproc shaders take a second constant: bytes per pixel (3 here, 4 for BGRA).
++        ncnn::vk_specialization_type bgr24;bgr24.i = 3;
+ 
+         {
+             static std::vector<uint32_t> spirv;
+@@ -189,7 +261,14 @@ int RIFE::load(const std::string& modeldir)
+ 
+             rife_preproc = new ncnn::Pipeline(vkdev);
+             rife_preproc->set_optimal_local_size_xyz(8, 8, 3);
+-            rife_preproc->create(spirv.data(), spirv.size() * 4, specializations);
++            rife_preproc->create(spirv.data(), spirv.size() * 4, tta_mode?specializations:std::vector<ncnn::vk_specialization_type>{specializations[0],bgr24});
++            if (!tta_mode)
++            {
++                std::vector<ncnn::vk_specialization_type> bgra(2);bgra[0]=specializations[0];bgra[1].i=4;
++                rife_preproc4 = new ncnn::Pipeline(vkdev);
++                rife_preproc4->set_optimal_local_size_xyz(8, 8, 3);
++                rife_preproc4->create(spirv.data(), spirv.size() * 4, bgra);
++            }
+         }
+ 
+         {
+@@ -208,7 +287,14 @@ int RIFE::load(const std::string& modeldir)
+ 
+             rife_postproc = new ncnn::Pipeline(vkdev);
+             rife_postproc->set_optimal_local_size_xyz(8, 8, 3);
+-            rife_postproc->create(spirv.data(), spirv.size() * 4, specializations);
++            rife_postproc->create(spirv.data(), spirv.size() * 4, tta_mode?specializations:std::vector<ncnn::vk_specialization_type>{specializations[0],bgr24});
++            if (!tta_mode)
++            {
++                std::vector<ncnn::vk_specialization_type> bgra(2);bgra[0]=specializations[0];bgra[1].i=4;
++                rife_postproc4 = new ncnn::Pipeline(vkdev);
++                rife_postproc4->set_optimal_local_size_xyz(8, 8, 3);
++                rife_postproc4->create(spirv.data(), spirv.size() * 4, bgra);
++            }
+         }
+     }
+ 
+@@ -421,8 +507,8 @@ int RIFE::process(const ncnn::Mat& in0image, const ncnn::Mat& in1image, float ti
+     opt.staging_vkallocator = staging_vkallocator;
+ 
+     // pad to 32n
+-    int w_padded = (w + 31) / 32 * 32;
+-    int h_padded = (h + 31) / 32 * 32;
++    int w_padded = (w + padding - 1) / padding * padding;
++    int h_padded = (h + padding - 1) / padding * padding;
+ 
+     const size_t in_out_tile_elemsize = opt.use_fp16_storage ? 2u : 4u;
+ 
+@@ -1236,8 +1322,8 @@ int RIFE::process_cpu(const ncnn::Mat& in0image, const ncnn::Mat& in1image, floa
+     ncnn::Option opt = flownet.opt;
+ 
+     // pad to 32n
+-    int w_padded = (w + 31) / 32 * 32;
+-    int h_padded = (h + 31) / 32 * 32;
++    int w_padded = (w + padding - 1) / padding * padding;
++    int h_padded = (h + padding - 1) / padding * padding;
+ 
+     ncnn::Mat in0;
+     ncnn::Mat in1;
+@@ -2496,8 +2582,8 @@ int RIFE::process_v4(const ncnn::Mat& in0image, const ncnn::Mat& in1image, float
+     opt.staging_vkallocator = staging_vkallocator;
+ 
+     // pad to 32n
+-    int w_padded = (w + 31) / 32 * 32;
+-    int h_padded = (h + 31) / 32 * 32;
++    int w_padded = (w + padding - 1) / padding * padding;
++    int h_padded = (h + padding - 1) / padding * padding;
+ 
+     const size_t in_out_tile_elemsize = opt.use_fp16_storage ? 2u : 4u;
+ 
+@@ -3226,8 +3312,8 @@ int RIFE::process_v4_cpu(const ncnn::Mat& in0image, const ncnn::Mat& in1image, f
+     ncnn::Option opt = flownet.opt;
+ 
+     // pad to 32n
+-    int w_padded = (w + 31) / 32 * 32;
+-    int h_padded = (h + 31) / 32 * 32;
++    int w_padded = (w + padding - 1) / padding * padding;
++    int h_padded = (h + padding - 1) / padding * padding;
+ 
+     ncnn::Mat in0;
+     ncnn::Mat in1;
+diff --git a/src/rife.h b/src/rife.h
+index 9fffced..e24550b 100644
+--- a/src/rife.h
++++ b/src/rife.h
+@@ -4,6 +4,8 @@
+ #define RIFE_H
+ 
+ #include <string>
++#include <stdint.h>
++struct RifeTaggedCache;
+ 
+ // ncnn
+ #include "net.h"
+@@ -11,7 +13,7 @@
+ class RIFE
+ {
+ public:
+-    RIFE(int gpuid, bool tta_mode = false, bool tta_temporal_mode = false, bool uhd_mode = false, int num_threads = 1, bool rife_v2 = false, bool rife_v4 = false);
++    RIFE(int gpuid, bool tta_mode = false, bool tta_temporal_mode = false, bool uhd_mode = false, int num_threads = 1, bool rife_v2 = false, bool rife_v4 = false, int padding = 32);
+     ~RIFE();
+ 
+ #if _WIN32
+@@ -28,13 +30,27 @@ public:
+ 
+     int process_v4_cpu(const ncnn::Mat& in0image, const ncnn::Mat& in1image, float timestep, ncnn::Mat& outimage) const;
+ 
++    int process_v4_tagged(const ncnn::Mat&,const ncnn::Mat&,float,ncnn::Mat&,uint64_t,uint64_t) const;
++    // ConsoleSmooth: set before load(). RIFE v4 flow at half size (inference scale 0.5);
++    // the output image stays full size. Requires padding 64.
++    bool flow_half = false;
++    // 1.6.5: flow size relative to the image when flow_half is set (0.5 UHD, 0.75 QHD; padding 64 / 128).
++    float flow_scale = 0.5f;
++    // 1.7.8: last process_v4_tagged stage times in ms (in, gpu, out).
++    mutable double stage_ms[3] = {-1, -1, -1};
++    // 1.7.8 settings switch: fp16 arithmetic where the GPU supports it (set before load()).
++    bool fp16_arith = false;
+ private:
++    mutable RifeTaggedCache* tagged_cache = nullptr;
+     ncnn::VulkanDevice* vkdev;
+     ncnn::Net flownet;
++    ncnn::Net tailnet; // flow_half: full-size warp and blend
+     ncnn::Net contextnet;
+     ncnn::Net fusionnet;
+     ncnn::Pipeline* rife_preproc;
+     ncnn::Pipeline* rife_postproc;
++    ncnn::Pipeline* rife_preproc4 = nullptr;  // BGRA input (tagged path)
++    ncnn::Pipeline* rife_postproc4 = nullptr; // BGRA output (tagged path)
+     ncnn::Pipeline* rife_flow_tta_avg;
+     ncnn::Pipeline* rife_flow_tta_temporal_avg;
+     ncnn::Pipeline* rife_out_tta_temporal_avg;
+@@ -49,6 +65,7 @@ private:
+     int num_threads;
+     bool rife_v2;
+     bool rife_v4;
++    int padding;
+ };
+ 
+ #endif // RIFE_H
+diff --git a/src/rife_postproc.comp b/src/rife_postproc.comp
+index 0dcb761..2358c7a 100644
+--- a/src/rife_postproc.comp
++++ b/src/rife_postproc.comp
+@@ -11,6 +11,8 @@
+ #endif
+ 
+ layout (constant_id = 0) const int bgr = 0;
++// ConsoleSmooth: bytes per pixel of the 8-bit image (3 = BGR/RGB, 4 = BGRA, alpha written as 255).
++layout (constant_id = 1) const int channels = 3;
+ 
+ layout (binding = 0) readonly buffer bottom_blob { sfp bottom_blob_data[]; };
+ #if NCNN_int8_storage
+@@ -52,9 +54,12 @@ void main()
+     uint v32 = clamp(uint(floor(v)), 0, 255);
+ 
+     if (bgr == 0)
+-        top_blob_data[v_offset * 3 + gz] = uint8_t(v32);
++        top_blob_data[v_offset * channels + gz] = uint8_t(v32);
+     else
+-        top_blob_data[v_offset * 3 + 2 - gz] = uint8_t(v32);
++        top_blob_data[v_offset * channels + 2 - gz] = uint8_t(v32);
++
++    if (channels == 4 && gz == 0)
++        top_blob_data[v_offset * 4 + 3] = uint8_t(255);
+ #else
+     int v_offset = gz * p.outcstep + gy * p.outw + gx;
+ 
+diff --git a/src/rife_preproc.comp b/src/rife_preproc.comp
+index e671b1b..866a78b 100644
+--- a/src/rife_preproc.comp
++++ b/src/rife_preproc.comp
+@@ -11,6 +11,8 @@
+ #endif
+ 
+ layout (constant_id = 0) const int bgr = 0;
++// ConsoleSmooth: bytes per pixel of the 8-bit image (3 = BGR/RGB, 4 = BGRA with alpha ignored).
++layout (constant_id = 1) const int channels = 3;
+ 
+ #if NCNN_int8_storage
+ layout (binding = 0) readonly buffer bottom_blob { uint8_t bottom_blob_data[]; };
+@@ -51,9 +53,9 @@ void main()
+     float v;
+ 
+     if (bgr == 0)
+-        v = float(uint(bottom_blob_data[v_offset * 3 + gz]));
++        v = float(uint(bottom_blob_data[v_offset * channels + gz]));
+     else
+-        v = float(uint(bottom_blob_data[v_offset * 3 + 2 - gz]));
++        v = float(uint(bottom_blob_data[v_offset * channels + 2 - gz]));
+ #else
+     int v_offset = gz * p.cstep + gy * p.w + gx;
+ 
+diff --git a/src/rife_tagged_cache.h b/src/rife_tagged_cache.h
+new file mode 100644
+index 0000000..4f9c398
+--- /dev/null
++++ b/src/rife_tagged_cache.h
+@@ -0,0 +1,113 @@
++// SPDX-License-Identifier: MIT
++// ConsoleSmooth extension: reuse immutable source images identified by the owning live scheduler.
++// This RIFE instance belongs to one inference worker. No cross-thread cache.
++#include <cstring>
++#include <chrono>
++namespace ncnn{extern thread_local std::chrono::steady_clock::time_point cs_fence_done;}
++struct RifeTaggedCache {
++    ncnn::VulkanDevice* device;
++    ncnn::VkAllocator *blob, *staging;
++    ncnn::VkMat padded[2],phase;
++    int phase_w=0,phase_h=0;float phase_t=-1;
++    uint64_t ids[2]={0,0};
++    int width[2]={0,0}, height[2]={0,0};
++    explicit RifeTaggedCache(ncnn::VulkanDevice* d):device(d),blob(d->acquire_blob_allocator()),staging(d->acquire_staging_allocator()){}
++    ~RifeTaggedCache(){
++        padded[0].release();padded[1].release();phase.release();
++        device->reclaim_blob_allocator(blob);device->reclaim_staging_allocator(staging);
++    }
++    int find(const ncnn::Mat& input,uint64_t id)const{
++
++        for(int i=0;i<2;i++)if(width[i]==input.w&&height[i]==input.h&&ids[i]==id)return i;
++        return -1;
++    }
++};
++int RIFE::process_v4_tagged(const ncnn::Mat& a,const ncnn::Mat& b,float t,ncnn::Mat& output,uint64_t aid,uint64_t bid)const{
++    const auto stage0=std::chrono::steady_clock::now();
++    if(!tagged_cache)tagged_cache=new RifeTaggedCache(vkdev);
++    RifeTaggedCache& cache=*tagged_cache;
++    struct SubmissionGuard {
++        RifeTaggedCache& cache;bool completed=false;
++        ~SubmissionGuard(){if(!completed){cache.width[0]=cache.width[1]=0;cache.phase_w=0;}}
++    } submission{cache};
++    ncnn::Option opt=flownet.opt;
++    opt.blob_vkallocator=cache.blob;opt.workspace_vkallocator=cache.blob;opt.staging_vkallocator=cache.staging;
++    const int w=a.w,h=a.h,pw=(w+padding-1)/padding*padding,ph=(h+padding-1)/padding*padding;
++    const size_t element=opt.use_fp16_storage?2u:4u;
++    // 3 = bgr24, 4 = BGRA (GPU byte path only; the CPU pixel fallback handles bgr24).
++    const int px=(int)a.elemsize;const bool bytes=opt.use_fp16_storage&&opt.use_int8_storage;
++    if((px!=3&&px!=4)||(int)b.elemsize!=px||(int)output.elemsize!=px||(px==4&&(!bytes||!rife_preproc4||!rife_postproc4)))return -1;
++    ncnn::VkCompute cmd(vkdev);
++    int ai=cache.find(a,aid),bi=cache.find(b,bid);
++    auto prepare=[&](const ncnn::Mat& input,int slot,uint64_t id){
++        // Clone before updating CPU identity; failed submissions invalidate cache.
++        ncnn::Mat raw;
++        if(bytes)raw=ncnn::Mat(w,h,(unsigned char*)input.data,(size_t)px,1);
++        else raw=ncnn::Mat::from_pixels((const unsigned char*)input.data,ncnn::Mat::PIXEL_BGR2RGB,w,h);
++        ncnn::VkMat uploaded;cmd.record_clone(raw,uploaded,opt);if(uploaded.empty())return false;
++        cache.padded[slot].create(pw,ph,3,element,1,cache.blob);if(cache.padded[slot].empty())return false;
++        std::vector<ncnn::VkMat> bindings={uploaded,cache.padded[slot]};
++        std::vector<ncnn::vk_constant_type> constants(6);
++        constants[0].i=uploaded.w;constants[1].i=uploaded.h;constants[2].i=uploaded.cstep;
++        constants[3].i=pw;constants[4].i=ph;constants[5].i=cache.padded[slot].cstep;
++        cmd.record_pipeline(px==4?rife_preproc4:rife_preproc,bindings,constants,cache.padded[slot]);
++        cache.ids[slot]=id;
++        cache.width[slot]=w;cache.height[slot]=h;return true;
++    };
++    if(ai<0){ai=bi==0?1:0;if(!prepare(a,ai,aid))return -1;}
++    if(bi<0){
++        if(aid==bid)bi=ai;
++        else {bi=1-ai;if(!prepare(b,bi,bid))return -1;}
++    }
++    // flow_half: the flow network sees half-size images, so its timestep map is half size.
++    const int qw=flow_half?(int)(pw*flow_scale+0.5f):pw,qh=flow_half?(int)(ph*flow_scale+0.5f):ph;
++    ncnn::VkMat& phase=cache.phase;
++    if(cache.phase_w!=qw||cache.phase_h!=qh||cache.phase_t!=t){
++        phase.create(qw,qh,1,element,1,cache.blob);if(phase.empty())return -1;
++        cache.phase_w=qw;cache.phase_h=qh;cache.phase_t=t;
++        std::vector<ncnn::VkMat> bindings={phase};std::vector<ncnn::vk_constant_type> constants(4);
++        constants[0].i=qw;constants[1].i=qh;constants[2].i=phase.cstep;constants[3].f=t;
++        cmd.record_pipeline(rife_v4_timestep,bindings,constants,phase);
++    }
++    ncnn::VkMat result;
++    {
++        ncnn::Extractor ex=flownet.create_extractor();
++        ex.set_blob_vkallocator(cache.blob);ex.set_workspace_vkallocator(cache.blob);ex.set_staging_vkallocator(cache.staging);
++        // flow_half: the full-size images enter before the head network's own half-size resize.
++        ex.input(flow_half?"cs_full_in0":"in0",cache.padded[ai]);ex.input(flow_half?"cs_full_in1":"in1",cache.padded[bi]);ex.input("in2",phase);
++        if(!flow_half){if(ex.extract("out0",result,cmd)){cache.width[0]=cache.width[1]=0;return -1;}}
++        else {
++            ncnn::VkMat flowmask;
++            if(ex.extract("cs_flowmask",flowmask,cmd)){cache.width[0]=cache.width[1]=0;return -1;}
++            ncnn::Extractor tail=tailnet.create_extractor();
++            tail.set_blob_vkallocator(cache.blob);tail.set_workspace_vkallocator(cache.blob);tail.set_staging_vkallocator(cache.staging);
++            tail.input("img0",cache.padded[ai]);tail.input("img1",cache.padded[bi]);tail.input("fm",flowmask);
++            if(tail.extract("out0",result,cmd)){cache.width[0]=cache.width[1]=0;return -1;}
++        }
++    }
++    if(result.empty())return -1;
++    ncnn::VkMat packed;
++    if(bytes)packed.create(w,h,(size_t)px,1,cache.blob);
++    else packed.create(w,h,3,(size_t)4u,1,cache.blob);
++    if(packed.empty())return -1;
++    {
++        std::vector<ncnn::VkMat> bindings={result,packed};std::vector<ncnn::vk_constant_type> constants(6);
++        constants[0].i=result.w;constants[1].i=result.h;constants[2].i=result.cstep;
++        constants[3].i=w;constants[4].i=h;constants[5].i=packed.cstep;
++        cmd.record_pipeline(px==4?rife_postproc4:rife_postproc,bindings,constants,packed);
++    }
++    ncnn::Mat out;
++    if(bytes)out=ncnn::Mat(w,h,(unsigned char*)output.data,(size_t)px,1);
++    cmd.record_clone(packed,out,opt);
++    const auto stage1=std::chrono::steady_clock::now();
++    int code=cmd.submit_and_wait();
++    if(code){cache.width[0]=cache.width[1]=0;return code;}
++    if(!(opt.use_fp16_storage&&opt.use_int8_storage))out.to_pixels((unsigned char*)output.data,ncnn::Mat::PIXEL_RGB2BGR);
++    // 1.7.8 stage timing: in = CPU upload copies + command recording, gpu = submit until the fence,
++    // out = staging download copy (ncnn copies it after the fence).
++    {using ms=std::chrono::duration<double,std::milli>;const auto stage2=std::chrono::steady_clock::now();
++     auto fence=ncnn::cs_fence_done<stage1?stage2:ncnn::cs_fence_done;
++     stage_ms[0]=ms(stage1-stage0).count();stage_ms[1]=ms(fence-stage1).count();stage_ms[2]=ms(stage2-fence).count();}
++    submission.completed=true;
++    return 0;
++}

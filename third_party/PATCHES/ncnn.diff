@@ -1,0 +1,35 @@
+diff --git a/src/command.cpp b/src/command.cpp
+index f4ec5667..913cdf2c 100644
+--- a/src/command.cpp
++++ b/src/command.cpp
+@@ -19,7 +19,10 @@
+ #include "option.h"
+ #include "pipeline.h"
+ 
++#include <chrono>
+ namespace ncnn {
++// ConsoleSmooth 1.7.8: when the last VkCompute::submit_and_wait fence completed on this thread (stage timing).
++thread_local std::chrono::steady_clock::time_point cs_fence_done;
+ 
+ class VkComputePrivate
+ {
+@@ -2435,6 +2438,7 @@ int VkCompute::submit_and_wait()
+             return -1;
+         }
+     }
++    cs_fence_done = std::chrono::steady_clock::now();
+ 
+     // handle delayed post records
+     for (size_t i = 0; i < d->delayed_records.size(); i++)
+diff --git a/src/gpu.cpp b/src/gpu.cpp
+index 773a6594..93eddd79 100644
+--- a/src/gpu.cpp
++++ b/src/gpu.cpp
+@@ -1107,6 +1107,7 @@ int create_gpu_instance()
+         // 650 = 0x5143 0x6050002
+ 
+         gpu_info.bug_storage_buffer_no_l1 = false;
++        gpu_info.bug_buffer_image_load_zero = false; // ConsoleSmooth: initialize before vendor-specific overrides.
+         gpu_info.bug_corrupted_online_pipeline_cache = false;
+         gpu_info.bug_implicit_fp16_arithmetic = false;
+ 

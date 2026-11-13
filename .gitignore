@@ -1,0 +1,6 @@
+/toolchain/
+/build/
+/dist/
+*.bak*
+*.pdb
+*.log

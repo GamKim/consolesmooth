@@ -1,0 +1,45 @@
+ConsoleSmooth native integration — third-party notices
+
+ConsoleSmooth's installer and adapter sources are MIT licensed.
+See LICENSE and engine/LICENSE. This is an independent, unofficial project.
+AVerMedia does not sponsor, endorse, certify or supply this extension.
+
+GStreamer 1.18 interface: LGPL-2.0-or-later.
+Copyright the GStreamer project and its contributors, including Erik Walthinsen,
+Wim Taymans and the contributors credited in the corresponding source files.
+Upstream source: https://gitlab.freedesktop.org/gstreamer/gstreamer/-/tree/1.18.0
+COPYING: https://raw.githubusercontent.com/GStreamer/gstreamer/1.18.0/COPYING
+
+GLib / GObject interface (observed host build: GLib 2.62.6): LGPL-2.1-or-later.
+Copyright the GLib authors and contributors; individual notices are retained in
+their upstream source. https://gitlab.gnome.org/GNOME/glib/-/tree/2.62.6
+COPYING: https://raw.githubusercontent.com/GNOME/glib/2.62.6/COPYING
+
+These libraries are dynamically accessed from the user's existing installation.
+No GStreamer, GLib, Qt, AVerMedia SDK, Windows or manufacturer application binary
+is bundled in this installer. The linked libraries and their use are covered by
+their respective LGPL terms; copies are in licenses/. Interface-compatible
+replacement GStreamer/GLib libraries are not rejected based on their hashes.
+ConsoleSmooth permits modification for the user's own use and reverse engineering
+to debug those modifications. Its own source is MIT licensed. Third-party rights
+and separate manufacturer terms are not granted or waived by this notice.
+These upstream source links do not purport to supply any unpublished vendor
+changes; the distributor of vendor-modified LGPL libraries is responsible for
+the corresponding source of those libraries.
+
+Automatic loading uses a public GStreamer device-provider factory. It exposes no
+fake capture devices. This is not a manufacturer-approved extension API.
+
+RIFE, ncnn, glslang, Vulkan interfaces and toolchain runtimes are listed in
+engine/THIRD_PARTY_NOTICES.txt with their complete notices in engine/licenses/.
+The manufacturer logos and font files are not bundled. ConsoleSmooth draws its
+own icon and uses fonts already installed on the user's system/host.
+
+IMPORTANT — REVIEW STILL REQUIRED
+Automatic HDMI input detection retains the reconstructed, version-specific
+AVerMedia SDK interface requested by the user. MIT licensing of our adapter does
+not establish permission for that integration. Manufacturer terms and applicable
+interoperability law require separate review before public distribution.
+https://www.avermedia.com/kr/eula
+This version number does not establish legal clearance or guarantee compatibility
+with all PCs, capture devices or future host versions.

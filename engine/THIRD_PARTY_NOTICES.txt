@@ -1,0 +1,51 @@
+ConsoleSmooth dependency notices
+
+Own source: MIT, see LICENSE.
+Native RIFE implementation: nihui/rife-ncnn-vulkan, MIT.
+RIFE model research/source: hzwer/ECCV2022-RIFE, MIT.
+Runtime model files: models/rife-v4.6/flownet.param and flownet.bin from the
+pinned nihui/rife-ncnn-vulkan repository. Unmodified; SHA256 is pinned in model_catalog.h.
+ncnn: Tencent, BSD-3-Clause plus bundled component notices in its full LICENSE.txt.
+glslang: Khronos and contributors; see its complete multi-component LICENSE.txt.
+Vulkan-Headers: Khronos; see LICENSE.md and LICENSES.
+Statically linked toolchain runtime components: libc++, libc++abi, libunwind
+(LLVM notices with exceptions), mingw-w64 CRT, and Zig runtime support.
+Their notices are retained in licenses/. Compiler source is available from
+https://github.com/ziglang/zig/tree/0.14.1 .
+
+GStreamer/GLib are dynamically accessed from the user's licensed Streaming Center
+installation; this project does not redistribute the manufacturer's binaries.
+The few public GStreamer 1.18 ABI declarations the plugin needs are written in
+plugin/tracer.c; no GStreamer header is copied. No OBS GPL reference code is compiled into this engine or adapter.
+
+See licenses/ for complete dependency notices and source-manifest.json for commits.
+
+Models use FP16 storage and FP32 arithmetic; native image dimensions retained.
+1.4.3: IFRNet, IFRNet Large and CAIN code and models were removed; RIFE 4.6 only.
+No manufacturer binary or proprietary LSFG model is redistributed.
+
+1.4.1 modifications: initialize ncnn GPU image-load workaround flag before vendor
+overrides. Model weights and precision unchanged.
+
+1.5.0 optional engines (selected by the user; RIFE 4.6 stays the default):
+AMD FidelityFX SDK 1.1.4 (FSR 3 optical flow + frame interpolation): MIT, Copyright (C) 2024
+Advanced Micro Devices, Inc. Full text in engines/fsr3/LICENSE-FidelityFX.txt.
+https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK tag v1.1.4. Compiled into the engine DLL
+(Vulkan backend only). Local changes: scratch arrays aligned to 16 bytes in ffx_vk.cpp (the
+original 4-byte alignment crashes under clang's aligned SSE moves); swapchain hook stubbed; GLSL
+shaders compiled with glslang 11.9 without the SPIR-V optimizer. Video input has no depth or game
+motion vectors, so FSR 3 runs on its own optical flow only.
+Not sponsored or endorsed by AMD.
+
+1.6.0 modifications to rife-ncnn-vulkan (MIT): pre/post-processing shaders take the bytes per
+pixel as a specialization constant (BGRA frames without CPU conversion). Above 1920x1080 the
+RIFE 4.6 flow network runs on half-size images and a weight-free tail network resizes the flow
+and mask to full size and warps/blends the full-size images (the reference RIFE scale=0.5
+inference). The model files stay unmodified and SHA256-pinned; the network description is
+rewritten in memory after the pinned file is verified.
+
+Source changes to third-party code in this repository are listed as diffs against the pinned
+upstream commits in third_party/PATCHES/ (rife-ncnn-vulkan.diff, ncnn.diff). FidelityFX SDK
+changes are described above (ffx_vk.cpp 16-byte alignment, swapchain stubbed in
+engine/ffx_swapchain_stub.cpp). Unused parts of ncnn and glslang (tests, examples, tools,
+python, documentation) are left out of this repository.
