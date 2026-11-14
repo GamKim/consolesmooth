@@ -5,7 +5,9 @@ Unofficial plugin, not affiliated with AVerMedia. Free.
 Requirements
 - An AVerMedia capture card and AVerMedia Streaming Center (tested versions 1.8.22.2 and the latest 1.9.19.1, x64).
 - A GPU with Vulkan. Minimum: AMD Radeon RX 6600 (1080p 60 fps to 120 fps), the lowest card we tested.
-  On it RIFE 4.6 estimates motion at 1/4 size (slightly lower quality); FSR 3 needs "Keep GPU clock up" on.
+  GeForce, from an approximate test (RTX 5080 clocked down to match each class, 11-14): FSR 3 generated fully down to
+  RTX 2060 class, RIFE down to RTX 3070 / 4060 class (2070 / 3060 class 68%).
+  On the RX 6600 RIFE 4.6 estimates motion at 1/4 size (slightly lower quality); FSR 3 needs "Keep GPU clock up" on.
   Slower GPUs are not supported: generation may fall short or quality drops.
 - A monitor of 120Hz or more to see the generated frames.
 
