@@ -34,7 +34,21 @@ Streaming Center를 닫고 `Plugin\ConsoleSmooth` 폴더의 `Uninstall.exe`를 �
 
 ## 측정값 (RTX 5080, GC573, FHD)
 
-비교 영상(화질·지연·Lossless Scaling)과 설정 창 사진은 [media](media/README.md) 폴더에 있습니다.
+### 비교 영상
+
+**스위치 젤다 시간의 오카리나, 하이랄 평원 — RIFE 2배**
+
+https://github.com/user-attachments/assets/0c97fe03-8895-42be-9851-01486aa7a7d2
+
+**PS5 GTA5 화질 모드(30fps), 빠른 회전 — RIFE 2배**
+
+https://github.com/user-attachments/assets/ffe548a1-51d5-49eb-92e2-d9c8df4aeee8
+
+**PS5 GTA5 화질 모드 운전 — Lossless Scaling(LLCV 위, 목표 120) vs ConsoleSmooth 2배**
+
+https://github.com/user-attachments/assets/e0214653-e373-46d5-af68-507320a252da
+
+다른 영상(지연 측정, 다른 게임)과 설정 창 사진은 [media](media/README.md)에 있습니다.
 
 | 입력 | 설정 | 생성 비율 |
 |---|---|---|

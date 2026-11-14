@@ -34,7 +34,21 @@ Close Streaming Center, run `Uninstall.exe` in the `Plugin\ConsoleSmooth` folder
 
 ## Measurements (RTX 5080, GC573, 1080p)
 
-Comparison videos (quality, latency, Lossless Scaling) and settings window photos are in the [media](media/README.md) folder.
+### Comparison videos
+
+**Switch Zelda Ocarina of Time, Hyrule Field — RIFE 2x**
+
+https://github.com/user-attachments/assets/f7919015-a84c-4154-9e60-9890c29eae86
+
+**PS5 GTA5 quality mode (30 fps), fast turn — RIFE 2x**
+
+https://github.com/user-attachments/assets/71ffde31-7c82-4382-978b-40cd33f3a6ed
+
+**PS5 GTA5 quality mode driving — Lossless Scaling on LLCV (target 120) vs ConsoleSmooth 2x**
+
+https://github.com/user-attachments/assets/e0214653-e373-46d5-af68-507320a252da
+
+More videos (latency, other games) and settings window photos: [media](media/README.en.md).
 
 | Input | Setting | Generated |
 |---|---|---|
