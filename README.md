@@ -20,7 +20,7 @@ AVerMedia와 관계없는 개인 프로젝트이며, AVerMedia의 프로그램�
 ## 필요한 것
 
 - AVerMedia 캡처보드 + Streaming Center 1.8.22.2 · 최신 1.9.19.1 x64 (확인: Live Gamer 4K GC573, GC313 Pro, GC553 Pro)
-- Windows x64, Vulkan GPU. 최소 사양: **AMD Radeon RX 6600** (FHD 60 → 120fps). 지포스는 RTX 2060급 이상(근사 측정).
+- Windows x64, Vulkan GPU. 최소 사양: **AMD Radeon RX 6600** (FHD 60 → 120fps). 지포스는 FSR 3 기준 RTX 2060급, RIFE 기준 RTX 3070·4060급 이상(근사 측정).
 - 120Hz 이상 모니터
 - 120fps로 들어오는 게임은 배수 대신 "목표 프레임"을 모니터 주사율에 맞춰 쓰세요(예: 160Hz 모니터면 160). 2배(240fps)는 160Hz 모니터에 다 보이지 않고, 설정의 전체 화면에서는 생성 장이 거의 보이지 않습니다.
 - 120fps 녹화는 Streaming Center 녹화 비트레이트를 40\~50Mbps로 올리세요(15Mbps면 화면이 뭉개집니다).
