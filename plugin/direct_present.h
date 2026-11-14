@@ -13,7 +13,7 @@
 #define COBJMACROS
 #include "ui_lang.h"
 #include <d3d11.h>
-#include <dxgi1_2.h>
+#include <dxgi1_5.h> /* 2.2.4: IDXGIFactory5 for tearing (variable refresh / sync off) */
 #define DIRECT_CLOSE_MESSAGE (WM_APP+1)
 static volatile LONG direct_mode;static int direct_forced;
 static volatile LONG direct_state;
@@ -29,6 +29,8 @@ typedef HRESULT (WINAPI *CsCompile)(const void*,SIZE_T,const char*,const void*,v
 static const IID cs_iid_factory1={0x770aae78,0xf26f,0x4dba,{0xa8,0x29,0x25,0x3c,0x83,0xd1,0xb3,0x87}};
 static const IID cs_iid_factory2={0x50c83a1c,0xe072,0x4c48,{0x87,0xb0,0x36,0x30,0xfa,0x36,0xa6,0xd0}};
 static const IID cs_iid_texture={0x6f15aaf2,0xd208,0x4e89,{0x9a,0xb4,0x48,0x95,0x35,0xd3,0x4f,0x9c}};
+static const IID cs_iid_factory5={0x7632e1f5,0xee65,0x4dca,{0x87,0xfd,0x84,0xcd,0x75,0xf8,0x83,0x8d}};
+static int direct_tearing; /* this swap chain was made with ALLOW_TEARING */
 static const IID cs_iid_device1={0x77db970f,0x6276,0x48ba,{0xba,0x28,0x07,0x01,0x43,0xb4,0x39,0x2c}};
 static const char direct_vs_src[]="struct V{float4 p:SV_Position;float2 uv:TEXCOORD0;};V main(uint i:SV_VertexID){V o;o.uv=float2((i<<1)&2,i&2);o.p=float4(o.uv*float2(2,-2)+float2(-1,1),0,1);return o;}";
 /* 2.0.1 (11-11 night): full screen sharpen switch. The 1080p frame is stretched to the monitor (4K here) with a plain
@@ -124,6 +126,18 @@ static int direct_shader(CsCompile compile,const char *src,const char *target,ID
  if(hr<0)logline("DIRECT_SHADER_FAILED target=%s hr=%08lx %s",target,(unsigned long)hr,err?(char*)ID3D10Blob_GetBufferPointer(err):"");
  if(err)ID3D10Blob_Release(err);return hr>=0;
 }
+/* 2.2.4: DXGI_FEATURE_PRESENT_ALLOW_TEARING on this PC (needed for variable refresh and sync off in full screen). Cached. */
+static int direct_tearing_check(IDXGIFactory2 *factory){
+ IDXGIFactory5 *f5=NULL;BOOL allow=FALSE;
+ if(IDXGIFactory2_QueryInterface(factory,&cs_iid_factory5,(void**)&f5)>=0){if(IDXGIFactory5_CheckFeatureSupport(f5,DXGI_FEATURE_PRESENT_ALLOW_TEARING,&allow,sizeof allow)<0)allow=FALSE;IDXGIFactory5_Release(f5);}
+ return allow?1:0;
+}
+static int direct_tearing_supported(void){
+ static volatile LONG cached=-1;LONG c=InterlockedCompareExchange(&cached,0,0);if(c>=0)return (int)c;
+ HMODULE dxgi=LoadLibraryW(L"dxgi.dll");HRESULT (WINAPI *make_factory)(REFIID,void**)=NULL;if(dxgi)*(FARPROC*)&make_factory=GetProcAddress(dxgi,"CreateDXGIFactory1");
+ IDXGIFactory2 *factory=NULL;int ok=0;if(make_factory&&make_factory(&cs_iid_factory2,(void**)&factory)>=0){ok=direct_tearing_check(factory);IDXGIFactory2_Release(factory);}
+ InterlockedExchange(&cached,ok);return ok;
+}
 static int direct_win_w;
 static int direct_create(void){
  HMODULE dxgi=LoadLibraryW(L"dxgi.dll"),d3d=LoadLibraryW(L"d3d11.dll"),fxc=LoadLibraryW(L"d3dcompiler_47.dll");if(!dxgi||!d3d||!fxc){logline("DIRECT_LOAD_FAILED");return 0;}
@@ -141,7 +155,8 @@ static int direct_create(void){
  IDXGIDevice1 *dd=NULL;if(ID3D11Device_QueryInterface(direct_dev,&cs_iid_device1,(void**)&dd)>=0){IDXGIDevice1_SetMaximumFrameLatency(dd,1);IDXGIDevice1_Release(dd);}
  WNDCLASSW wc={.lpfnWndProc=direct_proc,.hInstance=GetModuleHandleW(NULL),.lpszClassName=L"ConsoleSmoothDirectTest"};RegisterClassW(&wc);
  direct_hwnd=CreateWindowExW(WS_EX_TOPMOST,wc.lpszClassName,L"ConsoleSmooth full screen",WS_POPUP,wx,wy,sw,sh,NULL,NULL,wc.hInstance,NULL);if(!direct_hwnd){logline("DIRECT_WINDOW_FAILED %lu",GetLastError());return 0;}
- DXGI_SWAP_CHAIN_DESC1 desc={.Width=(UINT)sw,.Height=(UINT)sh,.Format=DXGI_FORMAT_B8G8R8A8_UNORM,.SampleDesc={1,0},.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT,.BufferCount=3,.Scaling=DXGI_SCALING_NONE,.SwapEffect=DXGI_SWAP_EFFECT_FLIP_DISCARD,.AlphaMode=DXGI_ALPHA_MODE_IGNORE};
+ direct_tearing=direct_tearing_check(factory);
+ DXGI_SWAP_CHAIN_DESC1 desc={.Width=(UINT)sw,.Height=(UINT)sh,.Format=DXGI_FORMAT_B8G8R8A8_UNORM,.SampleDesc={1,0},.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT,.BufferCount=3,.Scaling=DXGI_SCALING_NONE,.SwapEffect=DXGI_SWAP_EFFECT_FLIP_DISCARD,.AlphaMode=DXGI_ALPHA_MODE_IGNORE,.Flags=direct_tearing?DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING:0};
  hr=IDXGIFactory2_CreateSwapChainForHwnd(factory,(IUnknown*)direct_dev,direct_hwnd,&desc,NULL,NULL,&direct_chain);if(hr<0){logline("DIRECT_CHAIN_FAILED hr=%08lx",(unsigned long)hr);return 0;}
  ID3D11Texture2D *back=NULL;if(IDXGISwapChain1_GetBuffer(direct_chain,0,&cs_iid_texture,(void**)&back)<0)return 0;
  hr=ID3D11Device_CreateRenderTargetView(direct_dev,(ID3D11Resource*)back,NULL,&direct_rtv);ID3D11Texture2D_Release(back);if(hr<0)return 0;
@@ -153,7 +168,7 @@ static int direct_create(void){
  D3D11_SAMPLER_DESC sd={.Filter=D3D11_FILTER_MIN_MAG_MIP_LINEAR,.AddressU=D3D11_TEXTURE_ADDRESS_CLAMP,.AddressV=D3D11_TEXTURE_ADDRESS_CLAMP,.AddressW=D3D11_TEXTURE_ADDRESS_CLAMP,.MaxLOD=D3D11_FLOAT32_MAX};if(ID3D11Device_CreateSamplerState(direct_dev,&sd,&direct_sampler)<0)return 0;
  direct_view=(D3D11_VIEWPORT){0,0,(float)sw,(float)sh,0,1};
  ShowWindow(direct_hwnd,SW_SHOW);SetForegroundWindow(direct_hwnd);if(direct_forced)SetTimer(direct_hwnd,1,300000,NULL);
- logline("DIRECT_READY monitor=%dx%d frame=%dx%d",sw,sh,direct_w,direct_h);return 1;
+ logline("DIRECT_READY monitor=%dx%d frame=%dx%d tearing=%d sync=%ld",sw,sh,direct_w,direct_h,direct_tearing,InterlockedCompareExchange(&direct_sync,0,0));return 1;
 }
 static DWORD WINAPI direct_thread(void *unused){
  (void)unused;AcquireSRWLockExclusive(&direct_life); /* A new window waits for the previous one's cleanup. */
@@ -188,7 +203,9 @@ static int direct_show(void){
   ID3D11DeviceContext_PSSetShaderResources(direct_ctx,0,1,&direct_srv);ID3D11DeviceContext_PSSetSamplers(direct_ctx,0,1,&direct_sampler);ID3D11DeviceContext_Draw(direct_ctx,3,0);
   /* A blocking Present keeps one frame queued for good (measured: 1.45 refreshes instead of 0.5).
    * If the previous flip is still pending, skip this frame once so the queue empties. */
-  QueryPerformanceCounter(&b);hr=IDXGISwapChain1_Present(direct_chain,1,DXGI_PRESENT_DO_NOT_WAIT);QueryPerformanceCounter(&c);
+  /* 2.2.4: variable refresh / sync off present at once with tearing allowed: a G-Sync/FreeSync monitor then refreshes when the frame arrives. */
+  LONG sync=InterlockedCompareExchange(&direct_sync,0,0);
+  QueryPerformanceCounter(&b);hr=sync&&direct_tearing?IDXGISwapChain1_Present(direct_chain,0,DXGI_PRESENT_ALLOW_TEARING):IDXGISwapChain1_Present(direct_chain,1,DXGI_PRESENT_DO_NOT_WAIT);QueryPerformanceCounter(&c);
   if(hr==DXGI_ERROR_WAS_STILL_DRAWING){++direct_skips;hr=S_OK;}
   direct_copy_ms+=1000.0*(b.QuadPart-a.QuadPart)/f.QuadPart;direct_present_ms+=1000.0*(c.QuadPart-b.QuadPart)/f.QuadPart;
   if(++direct_presents%600==0){logline("DIRECT_STATS presents=%lld repeats=%lld skips=%lld draw_avg_ms=%.2f present_avg_ms=%.2f",(long long)direct_presents,(long long)direct_repeats,(long long)direct_skips,direct_copy_ms/600,direct_present_ms/600);direct_copy_ms=direct_present_ms=0;}

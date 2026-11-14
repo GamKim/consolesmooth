@@ -48,6 +48,9 @@ static int on_pace_impl(void *pad,void *info,void *data){
  /* Each sink needs its first buffers to preroll: dropping them stopped the pipeline in 5 of 7 runs. */
  if(s->direct&&s->direct_passed<300)++s->direct_passed;
  else if(s->direct==2&&(no_thumb||InterlockedCompareExchange(&direct_state,0,0)==2))return 0;
+ /* 2.2.4 (11-14 user): variable refresh or sync off, in the window and in full screen: no refresh hold on the large preview,
+  * each frame goes on as it arrives (full screen: our window presents with tearing allowed). */
+ if(s->direct==1&&InterlockedCompareExchange(&direct_sync,0,0)){s->valid=0;s->push=0;return pace_pass(s);}
  if(!dwm_timing||dwm_timing(NULL,&t)<0||!t.qpcRefreshPeriod)return pace_pass(s);
  void *caps=current_caps(pad),*st=caps?caps_structure(caps,0):NULL;int fn=0,fd=1;
  if(st)structure_fraction(st,"framerate",&fn,&fd);if(caps)caps_unref(caps);if(fn<=0||fd<=0)return pace_pass(s);
@@ -122,6 +125,7 @@ static void pace_sink(void *sinkpad){
  logline("VBLANK_PACE_ATTACHED point=preview-sink");
  PaceState *s=HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,sizeof *s);if(!s)return;
  /* The root pipeline's sink is the scene thumbnail; the one inside a GstBin is the large preview. */
- {char *path=object_path(sinkpad);s->direct=path&&strstr(path,"/GstBin:")?1:2;mem_free(path);} /* Always: the option can be turned on while running. */
+ {char *path=object_path(sinkpad);s->direct=path&&strstr(path,"/GstBin:")?1:2;
+  mem_free(path);} /* Always: the option can be turned on while running. */
  if(!add_probe(sinkpad,1<<4,on_pace,s,pace_free))pace_free(s);
 }

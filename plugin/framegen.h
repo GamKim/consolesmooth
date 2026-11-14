@@ -32,6 +32,12 @@ static void (*engine_set_gpu_options)(int);
 static int (*stream_stage_stats)(void*,StageStats*);static const char* (*stream_gpu_info)(void*);
 static SRWLOCK stage_lock=SRWLOCK_INIT;static StageStats ui_stage;static char ui_gpu_info[512];static int ui_stage_valid;
 static int idle_all; /* CS_TEST_IDLE_ALL=1: process unchanged groups too (pre-2.0.1) */
+/* 2.2.4 (11-14, friend: "generation short" after updates): SC builds one root pipeline per scene preview. The scene thumbnail
+ * pipeline gets the capture through a proxy and ran its own RIFE group on moving games, taking the GPU from the main picture
+ * (5080 at 2100 MHz, SC 1.8.22.2, PS5 moving: thumbnail group 77.7% generated, main preview/recording group 16.8%).
+ * The pipeline of the large preview (the D3D11 sink inside a GstBin, see pace_sink) is the main one; once it is known, groups in
+ * any other pipeline pass their picture through like idle groups. CS_TEST_ALL_GROUPS=1 (test only) keeps the old behaviour. */
+static char main_pipe[64];static SRWLOCK main_pipe_lock=SRWLOCK_INIT;static int all_groups;
 static volatile LONG reco_trial; /* 2.0.0: 권장 설정 trial running, publish stage times every 30 ticks */
 /* The preview and the record/stream route each run a stream; only one generates. The trial follows the first group
  * that shows generated or repeated frames (both toolbar stats alternate between groups). Reset per model by the trial. */
@@ -60,7 +66,7 @@ static _Thread_local int tick_new_dump; /* set by frame_buffer: this tick carrie
 #include "frame_dump.h"
 static LONG frame_force_model=-1; /* CS_TEST_MODEL=<id>: model without the toolbar (test) */
 static LONG frame_force_stable=-1; /* CS_TEST_STABLE=0|1: latency mode with an automatic buffer, without the toolbar (test) */
-typedef struct {int tl_slot,ever_changed,fp_set,idle_logged;uint64_t fp,idle_ticks;void *stream,*pool,*group;HANDLE initializer;volatile LONG init_state;int width,height,model,disabled,sn,sd,tn,td;uint64_t ticks,logical_ticks,cycle,pool_fallbacks;uint8_t *input;LONG applied,observed_toggle,generated_toggle;CsCadence cpu;FrameProof *proof;int64_t space_next;uint64_t space_frames,space_waits;double space_wait_ms;LONG gpu_options;} FrameContext;
+typedef struct {int pipe_state;char pipe[64];int tl_slot,ever_changed,fp_set,idle_logged;uint64_t fp,idle_ticks;void *stream,*pool,*group;HANDLE initializer;volatile LONG init_state;int width,height,model,disabled,sn,sd,tn,td;uint64_t ticks,logical_ticks,cycle,pool_fallbacks;uint8_t *input;LONG applied,observed_toggle,generated_toggle;CsCadence cpu;FrameProof *proof;int64_t space_next;uint64_t space_frames,space_waits;double space_wait_ms;LONG gpu_options;} FrameContext;
 static void frame_release(FrameContext *f){
  if(f->stream){CsStats s={0};stream_stats(f->stream,&s);
   logline("FG_STOP ticks=%llu generated=%llu repeat=%llu failures=%llu",(unsigned long long)s.ticks,(unsigned long long)s.generated,(unsigned long long)s.repeated,(unsigned long long)s.failures);
@@ -255,6 +261,12 @@ static int frame_buffer(void *pad,void *info,void *data){
   * (412 ms/s, as much as the real preview group). Until a group's picture changes once it passes the host buffer
   * through untouched: no engine, no copies. Live content changes within a frame, so real previews start at once.
   * CS_TEST_IDLE_ALL=1 (test only) restores the old behaviour. */
+ /* Group in a pipeline other than the large preview's: pass through (see main_pipe). pipe_state 0 unknown, 1 main, 2 other. */
+ if(!all_groups&&f->pipe_state!=1){
+  if(!f->pipe[0]&&f->group){char *path=object_path(f->group);if(path){char *e=strstr(path+1,"/");size_t n=e?(size_t)(e-path)+1:strlen(path);if(n>=sizeof f->pipe)n=sizeof f->pipe-1;memcpy(f->pipe,path,n);f->pipe[n]=0;mem_free(path);}}
+  char known[64];AcquireSRWLockShared(&main_pipe_lock);memcpy(known,main_pipe,sizeof known);ReleaseSRWLockShared(&main_pipe_lock);
+  if(known[0]&&f->pipe[0]){int other=strcmp(known,f->pipe)!=0;if(f->pipe_state!=(other?2:1)){f->pipe_state=other?2:1;logline("FG_GROUP_ROLE group=%p pipeline=%s role=%s",f->group,f->pipe,other?"other (pass through)":"main");}if(other)return 1;}
+ }
  if(!f->ever_changed&&!idle_all){void *in=probe_buffer(info);CsMap m={0};uint64_t fp=0;int ok=0;
   if(in&&buffer_map(in,&m,1)){size_t step=m.size/1024;step&=~(size_t)3;if(step>=4){for(int i=0;i<1024;i++)fp=fp*31+*(uint32_t*)(m.data+step*i);ok=1;}buffer_unmap(in,&m);}
   if(!ok)f->ever_changed=1; /* cannot look: behave as before */

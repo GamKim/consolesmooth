@@ -8,14 +8,15 @@ A personal project, not affiliated with or endorsed by AVerMedia. No AVerMedia s
 
 ## Features
 
-- **Runs inside Streaming Center**: toggle it from the toolbar, no window capture or overlay.
+- **Runs inside Streaming Center**: turn it on and off from the toolbar or a shortcut (default Ctrl+Alt+F, changeable in the Advanced tab), no window capture or overlay. The settings window only chooses and saves; choices take effect when you turn it on.
 - **Records generated frames**: set the recording source to "With generated frames" for files at the output rate (e.g. 120/160 fps). For a 30 fps game the file is still 120 fps, but the new pictures are game fps x multiplier (60 per second at 2x).
 - **Two models**: RIFE 4.6 (default, quality) and AMD FSR 3 (2x and 4x, light).
 - **HUD protection**: fixed HUD (health bars, maps, button labels, including semi-transparent ones) is kept from the original.
 - **30 fps smoothing**: 30 fps games become "game fps × multiplier", evenly spaced (2x: 30 -> 60, every 16.7 ms), about +8 ms latency.
 - **FPS readout**: by default `input / now fps` (capture signal / frames shown per second, e.g. 60 / 120). With "Show the game's real frame rate" on: `original / now` (pictures the game changed / new pictures shown, e.g. a 30 fps game at 2x reads 30 / 60).
-- **Low latency view (beta)**: shows the incoming picture in full screen right away (also with generation off). While it is on, recording and streaming get no picture. PS5 menu, 240 fps phone, 11-13: about 23 ms behind passthrough (the Streaming Center preview with generation off: about 31-33 ms).
-- **59.94 Hz input (PS5)**, **recommended settings** (a real 25 s trial), Korean/English UI.
+- **Display sync**: V-Sync (default) / variable refresh (G-Sync, FreeSync) / off, for the window and full screen.
+- **Low latency view (beta)**: when turned on with the button or shortcut, shows the incoming picture in full screen right away. While it is on, recording and streaming get no picture. PS5 menu, 240 fps phone, 11-13: about 23 ms behind passthrough (the Streaming Center preview with generation off: about 31-33 ms).
+- **59.94 Hz input (PS5)**, **recommended settings** (a real 25 s trial that also looks at your GPU and whether the monitor has variable refresh), Korean/English UI.
 
 ## Requirements
 

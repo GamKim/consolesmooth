@@ -30,6 +30,13 @@ static int ui_full_dirty;static RECT ui_full_rect;
 static int ui_show_fps=1,ui_reconcile_target,ui_fps_game; /* 1.0.1 (11-13 user): readout = input / shown by default, game / shown when ui_fps_game */
 /* 2.0.1: full screen sharpen (bicubic upscale + adaptive sharpen in direct_present.h). Default off. */
 static int ui_sharpen;static volatile LONG direct_sharpen;
+/* 2.2.4 internal (11-14 user): display sync, full screen and window. 0 vertical sync (refresh hold, as before), 1 variable refresh
+ * (present on arrival; full screen with tearing allowed so G-Sync/FreeSync can follow), 2 off (present on arrival, full screen may tear). */
+static int ui_sync;static volatile LONG direct_sync;static int direct_tearing_supported(void);
+/* 2.2.4 (11-14, friend's RX 9070 XT test: turning it on and off in full screen is awkward): a global shortcut toggles frame
+ * generation like the toolbar button. Default Ctrl+Alt+F (no Windows default, not an NVIDIA/AMD overlay key); the Advanced tab
+ * records another combination (Ctrl or Alt required; Backspace = no shortcut). Saved as hotkey_mods (MOD_* bits) and hotkey_vk. */
+static int ui_hot_mods=MOD_CONTROL|MOD_ALT,ui_hot_vk='F',ui_hot_capture,ui_hot_ok=-1;
 /* 2.2.0 beta (11-13 user): "저지연 보기". Our full screen window shows the picture as it arrives, also with generation off,
  * without the preview refresh hold or output spacing; the record/stream route gets no frames (recording and streaming off). */
 static int ui_lowview;static volatile LONG low_view;
@@ -37,19 +44,20 @@ static int ui_record,ui_saved_record,ui_buffer,ui_saved_buffer,ui_model,ui_saved
 static int ui_low_buffer=15,ui_saved_low_buffer=15,ui_low_eligible=1;
 /* Display: 0 the host's window (composed, stays usable), 1 our direct full-screen window (direct_present.h). */
 static int ui_display,ui_saved_display,ui_direct_reopen;
+static int ui_apply_pending,ui_act_display,ui_act_lowview; /* 2.2.4: see ui_toggle_generation */
 static void direct_ui_sync(int allowed,int reopen);
 static LONG direct_status(void);
 static void direct_set_label(const wchar_t *text,int on);
 static double direct_rate(void);
 /* Bits 8-15 hold the manual stable buffer or, in low latency, a shorter buffer choice; 0 = plan buffer. */
 static int ui_buffer_bits(int stable,int manual,int low){return stable?manual:low==25?0:low;}
-static HWND ui_items[190];
+static HWND ui_items[200];
 /* 1.9.8 (11-10 user): the settings are split into tabs. 0 frame generation (what is changed most: on/off, model, rate,
  * latency, display, recommended settings), 1 FPS display and recording, 2 advanced (engine switches, diagnostics). */
 static int ui_tab;
 static int ui_tab_of(int id){
  static const short t0[]={123,111,122,128,106,130,107,132,133,129,134,135,136,138,139,142,125,126,124,140,152,158,159,127,180,181,182,153,154,155,156},
-  t1[]={145,165,144,146,183,188,189,148,149,150,151,178,179,185,186,187},t2[]={160,161,162,163,164,166,167,168,169,170,171,172,157,184};
+  t1[]={145,165,144,146,183,188,189,148,149,150,151,178,179,185,186,187,190,191,192,193,194},t2[]={160,161,162,163,164,166,167,168,169,170,171,172,157,184,195,196,197};
  for(unsigned i=0;i<sizeof t0/sizeof t0[0];i++)if(t0[i]==id)return 0;
  for(unsigned i=0;i<sizeof t1/sizeof t1[0];i++)if(t1[i]==id)return 1;
  for(unsigned i=0;i<sizeof t2/sizeof t2[0];i++)if(t2[i]==id)return 2;
@@ -113,7 +121,9 @@ static int ui_preferences(int save){
   ui_display=GetPrivateProfileIntW(L"preview",L"display_mode",0,path)==1;
   ui_show_fps=GetPrivateProfileIntW(L"preview",L"show_fps",1,path)==1;ui_fps_game=GetPrivateProfileIntW(L"preview",L"fps_game",0,path)==1;
   ui_sharpen=GetPrivateProfileIntW(L"preview",L"sharpen",0,path)==1;InterlockedExchange(&direct_sharpen,ui_sharpen);
-  ui_lowview=GetPrivateProfileIntW(L"preview",L"low_latency_view",0,path)==1;InterlockedExchange(&low_view,ui_lowview);
+  ui_hot_mods=GetPrivateProfileIntW(L"preview",L"hotkey_mods",MOD_CONTROL|MOD_ALT,path)&(MOD_CONTROL|MOD_ALT|MOD_SHIFT);ui_hot_vk=GetPrivateProfileIntW(L"preview",L"hotkey_vk",'F',path);if(ui_hot_vk<0||ui_hot_vk>255)ui_hot_vk='F';if(ui_hot_vk&&!(ui_hot_mods&(MOD_CONTROL|MOD_ALT)))ui_hot_mods|=MOD_CONTROL|MOD_ALT;
+  ui_sync=GetPrivateProfileIntW(L"preview",L"sync_mode",0,path);if(ui_sync<0||ui_sync>2)ui_sync=0;InterlockedExchange(&direct_sync,ui_sync);
+  ui_lowview=GetPrivateProfileIntW(L"preview",L"low_latency_view",0,path)==1;InterlockedExchange(&low_view,0); /* 2.2.4: active only after the on button */
   {int c=GetPrivateProfileIntW(L"preview",L"fps_corner",1,path);InterlockedExchange(&ui_fps_corner,c>=0&&c<=3?c:1);}
   ui_cadence=GetPrivateProfileIntW(L"preview",L"cadence30",0,path)!=0;ui_hudkeep=GetPrivateProfileIntW(L"preview",L"hud_keep",1,path)!=0; /* 1.9.6: default on (user 11-10) */
   ui_gpukeep=GetPrivateProfileIntW(L"preview",L"gpu_keep",ui_primary_is_amd()?1:0,path)==1;ui_fsrfast=GetPrivateProfileIntW(L"preview",L"fsr_fast",0,path)!=0;ui_latency=GetPrivateProfileIntW(L"preview",L"latency_priority",0,path)==1;InterlockedExchange(&engine_options,UI_ENGINE_BITS());
@@ -133,6 +143,53 @@ static void ui_save_sharpen(void){
  if(!n)n=GetEnvironmentVariableW(L"CS_ENGINE_DIR",dir,32768);if(!n||n>32000)return;
  swprintf(path,32768,L"%ls\\settings.ini",dir);if(!WritePrivateProfileStringW(L"preview",L"sharpen",ui_sharpen?L"1":L"0",path))ui_error=-2;
  logline("UI_SHARPEN enabled=%d",ui_sharpen);
+}
+static void ui_save_sync(void){
+ wchar_t dir[32768],path[32768],value[8];DWORD n=GetEnvironmentVariableW(L"CS_SETTINGS_DIR",dir,32768);
+ if(!n)n=GetEnvironmentVariableW(L"CS_ENGINE_DIR",dir,32768);if(!n||n>32000)return;
+ swprintf(path,32768,L"%ls\\settings.ini",dir);swprintf(value,8,L"%d",ui_sync);if(!WritePrivateProfileStringW(L"preview",L"sync_mode",value,path))ui_error=-2;
+ logline("UI_SYNC mode=%d",ui_sync);
+}
+static void ui_save_hotkey(void){
+ wchar_t dir[32768],path[32768],m[16],k[16];DWORD n=GetEnvironmentVariableW(L"CS_SETTINGS_DIR",dir,32768);
+ if(!n)n=GetEnvironmentVariableW(L"CS_ENGINE_DIR",dir,32768);if(!n||n>32000)return;
+ swprintf(path,32768,L"%ls\\settings.ini",dir);swprintf(m,16,L"%d",ui_hot_mods);swprintf(k,16,L"%d",ui_hot_vk);
+ if(!WritePrivateProfileStringW(L"preview",L"hotkey_mods",m,path)||!WritePrivateProfileStringW(L"preview",L"hotkey_vk",k,path))ui_error=-2;
+}
+static void ui_hot_name(wchar_t *out,int cap,int mods,int vk){
+ if(!vk){wcsncpy(out,ui_tr(L"없음",L"None"),cap-1);out[cap-1]=0;return;}
+ wchar_t key[32];
+ if((vk>='A'&&vk<='Z')||(vk>='0'&&vk<='9'))swprintf(key,32,L"%c",vk);
+ else if(vk>=VK_F1&&vk<=VK_F24)swprintf(key,32,L"F%d",vk-VK_F1+1);
+ else{UINT sc=MapVirtualKeyW((UINT)vk,MAPVK_VK_TO_VSC);LONG lp=(LONG)(sc<<16);
+  if(vk==VK_INSERT||vk==VK_DELETE||vk==VK_HOME||vk==VK_END||vk==VK_PRIOR||vk==VK_NEXT||(vk>=VK_LEFT&&vk<=VK_DOWN))lp|=1<<24;
+  if(!GetKeyNameTextW(lp,key,32))swprintf(key,32,L"0x%02X",vk);}
+ swprintf(out,cap,L"%ls%ls%ls%ls",mods&MOD_CONTROL?L"Ctrl + ":L"",mods&MOD_ALT?L"Alt + ":L"",mods&MOD_SHIFT?L"Shift + ":L"",key);
+}
+static void ui_hot_texts(void){
+ if(!ui_items[196]||!ui_items[197])return;wchar_t name[64];
+ if(ui_hot_capture)wcscpy(name,ui_tr(L"새 조합을 누르세요…",L"Press a new combination…"));else ui_hot_name(name,64,ui_hot_mods,ui_hot_vk);
+ SetWindowTextW(ui_items[196],name);InvalidateRect(ui_items[196],NULL,FALSE);
+ SetWindowTextW(ui_items[197],ui_hot_capture?ui_tr(L"Ctrl 또는 Alt와 함께 누르세요 · Backspace: 단축키 없음 · Esc: 취소",L"Hold Ctrl or Alt with a key · Backspace: no shortcut · Esc: cancel")
+  :ui_hot_ok==0?ui_tr(L"다른 프로그램이 이미 쓰는 조합이라 등록하지 못했어요. 다른 조합을 고르세요.",L"Another program already uses this combination. Pick another one.")
+  :ui_tr(L"전체 화면에서도 프레임 생성을 켜고 끕니다 · 버튼을 눌러 바꾸기",L"Turns frame generation on and off, also in full screen · click to change"));
+}
+/* Registered on the settings thread (ui_panel); the toolbar click path does the toggle. */
+static void ui_hot_register(void){
+ if(!ui_panel)return;UnregisterHotKey(ui_panel,1);ui_hot_ok=-1;
+ if(ui_hot_vk&&!ui_hot_capture){ui_hot_ok=RegisterHotKey(ui_panel,1,(UINT)ui_hot_mods|MOD_NOREPEAT,(UINT)ui_hot_vk)?1:0;}
+ wchar_t name[64];ui_hot_name(name,64,ui_hot_mods,ui_hot_vk);logline("UI_HOTKEY %ls registered=%d",name,ui_hot_ok);ui_hot_texts();
+}
+/* Settings window recording a new combination: called from the message loop for key presses. 1 = consumed. */
+static int ui_hot_key(const MSG *m){
+ if(!ui_hot_capture||(m->message!=WM_KEYDOWN&&m->message!=WM_SYSKEYDOWN))return 0;
+ int vk=(int)m->wParam;
+ if(vk==VK_CONTROL||vk==VK_SHIFT||vk==VK_MENU||vk==VK_LWIN||vk==VK_RWIN||vk==VK_LCONTROL||vk==VK_RCONTROL||vk==VK_LSHIFT||vk==VK_RSHIFT||vk==VK_LMENU||vk==VK_RMENU||vk==VK_PROCESSKEY||vk==VK_HANGUL||vk==VK_HANJA)return 1;
+ if(vk==VK_ESCAPE){ui_hot_capture=0;ui_hot_register();return 1;}
+ if(vk==VK_BACK){ui_hot_vk=0;ui_hot_capture=0;ui_save_hotkey();ui_hot_register();return 1;}
+ int mods=(GetKeyState(VK_CONTROL)<0?MOD_CONTROL:0)|(GetKeyState(VK_MENU)<0?MOD_ALT:0)|(GetKeyState(VK_SHIFT)<0?MOD_SHIFT:0);
+ if(!(mods&(MOD_CONTROL|MOD_ALT)))return 1; /* plain keys and Shift-only would steal typing in other programs */
+ ui_hot_mods=mods;ui_hot_vk=vk;ui_hot_capture=0;ui_save_hotkey();ui_hot_register();return 1;
 }
 static void ui_save_lowview(void){
  wchar_t dir[32768],path[32768];DWORD n=GetEnvironmentVariableW(L"CS_SETTINGS_DIR",dir,32768);
@@ -159,7 +216,7 @@ static void ui_save_options(void){
 }
 static void ui_line(HDC dc,int x,int y,int xx,int yy){MoveToEx(dc,x,y,NULL);LineTo(dc,xx,yy);}
 #include "controls_icons.h"
-static int ui_selected(int id){if(id==128||id==140||id==165||id==801)return 1; /* 801: Apply in the recommended-settings window */return id==154?!ui_display:id==155?ui_display:id==149?!ui_record:id==150?ui_record:id==130?ui_src==30:id==131?ui_src==60:id==132?!ui_mode:id==133?ui_mode:id>=134&&id<=136?ui_mult==id-132:0;}
+static int ui_selected(int id){if(id==128||id==140||id==165||id==801)return 1; /* 801: Apply in the recommended-settings window */return id>=191&&id<=193?ui_sync==id-191:id==154?!ui_display:id==155?ui_display:id==149?!ui_record:id==150?ui_record:id==130?ui_src==30:id==131?ui_src==60:id==132?!ui_mode:id==133?ui_mode:id>=134&&id<=136?ui_mult==id-132:0;}
 static void ui_draw_button(DRAWITEMSTRUCT *d){
  HDC dc=d->hDC;RECT r=d->rcItem;int id=(int)d->CtlID,chosen=ui_selected(id),hot=d->hwndItem==ui_hover;
  if(id>=175&&id<=177){ /* 1.9.8 tab list on the left, same look as the old single "프레임 생성" entry */
@@ -200,7 +257,7 @@ static void ui_layout(void){
  ui_small=CreateFontW(-ui_px(14),0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Malgun Gothic");
  ui_heading=CreateFontW(-ui_px(22),0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Malgun Gothic");
  ui_latin=CreateFontW(-ui_px(18),0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,ui_font_path[0]?L"Noto Sans":L"Segoe UI");
- for(int i=0;i<190;i++)if(ui_items[i]&&i!=147)SendMessageW(ui_items[i],WM_SETFONT,(WPARAM)((i==120||i==123||i==124||i==145)?ui_heading:(i==105||i==108||i==125||i==126||i==127||i==146||i==151||i==156||i==164||i==166||i==169||i==172||i==182||i==183||i==184)?ui_small:ui_font),TRUE);
+ for(int i=0;i<200;i++)if(ui_items[i]&&i!=147)SendMessageW(ui_items[i],WM_SETFONT,(WPARAM)((i==120||i==123||i==124||i==145)?ui_heading:(i==105||i==108||i==125||i==126||i==127||i==146||i==151||i==156||i==164||i==166||i==169||i==172||i==182||i==183||i==184||i==194||i==197)?ui_small:ui_font),TRUE);
  if(ui_tip)SendMessageW(ui_tip,WM_SETFONT,(WPARAM)ui_font,TRUE);
  if(old)DeleteObject(old);if(small)DeleteObject(small);if(heading)DeleteObject(heading);if(latin)DeleteObject(latin);
  ui_move(ui_items[120],24,18,500,34);for(int i=0;i<3;i++)ui_move(ui_items[175+i],1,74+52*i,208,52);
@@ -222,18 +279,20 @@ static void ui_layout(void){
  ui_move(ui_items[188],254,202,500,30);ui_move(ui_items[189],792,198,56,36); /* 1.0.1 (11-13 user): game frame rate switch; rows below +40 */
  ui_move(ui_items[178],254,358,500,30);ui_move(ui_items[179],792,354,56,36); /* 2.0.1 sharpen */
  ui_move(ui_items[185],254,430,500,30);ui_move(ui_items[186],792,426,56,36);ui_move(ui_items[187],254,466,594,66); /* 2.2.0 beta: low latency view (+40 in 2.2.1) */
+ ui_move(ui_items[190],254,562,500,30);for(int i=191;i<=193;i++)ui_move(ui_items[i],254+(i-191)*202,600,190,42);ui_move(ui_items[194],254,652,594,44); /* 2.2.4: display sync */
  ui_move(ui_items[148],254,258,240,30);ui_move(ui_items[149],504,252,164,42);ui_move(ui_items[150],680,252,164,42);ui_move(ui_items[151],254,302,590,24); /* 2.1.1: +26 */
  ui_move(ui_items[160],254,92,160,30);ui_move(ui_items[161],420,88,56,36);ui_move(ui_items[162],540,92,180,30);ui_move(ui_items[163],792,88,56,36);ui_move(ui_items[164],254,132,262,44); /* 2.1.8: two lines for the plain-language note */ui_move(ui_items[166],540,132,308,44); /* 11-13: two lines, when to turn it off */ /* 1.7.3: one note under each switch */
  /* 1.7.8 GPU switches row (AMD tests). */
  ui_move(ui_items[167],254,208,160,30);ui_move(ui_items[168],792,204,56,36);ui_move(ui_items[169],254,244,594,24); /* 2.1.8: +18 */
  ui_move(ui_items[170],254,300,200,30);ui_move(ui_items[171],792,296,56,36);ui_move(ui_items[172],254,336,594,24); /* 1.8.1, 2.1.8: +18 */
- ui_move(ui_items[157],254,394,300,42);ui_move(ui_items[184],254,442,594,24); /* 2.1.8 (11-11 user): what the diagnostics button does */
+ ui_move(ui_items[157],254,394,300,42);ui_move(ui_items[184],254,442,594,24);
+ ui_move(ui_items[195],254,498,300,30);ui_move(ui_items[196],560,494,288,42);ui_move(ui_items[197],254,544,594,40); /* 2.2.4 shortcut */ /* 2.1.8 (11-11 user): what the diagnostics button does */
  ui_move(ui_items[105],232,758,634,22);ui_move(ui_items[108],232,784,634,24);
  ui_move(ui_items[174],232,824,180,42);ui_move(ui_items[143],558,824,142,42);ui_move(ui_items[112],714,824,152,42);
 }
 static void ui_tab_apply(void){
- for(int id=103;id<190;id++){int t=ui_tab_of(id);if(t<0||!ui_items[id])continue;
-  int show=t==ui_tab;if(id>=134&&id<=136)show=show&&!ui_mode;if(id==138||id==139||id==142)show=show&&ui_mode;
+ for(int id=103;id<200;id++){int t=ui_tab_of(id);if(t<0||!ui_items[id])continue;
+  int show=t==ui_tab&&id!=111; /* 2.2.4 (11-14 user): no on/off switch in the settings window; toolbar button and shortcut only */if(id>=134&&id<=136)show=show&&!ui_mode;if(id==138||id==139||id==142)show=show&&ui_mode;
   ShowWindow(ui_items[id],show?SW_SHOW:SW_HIDE);}
  if(ui_popup)InvalidateRect(ui_popup,NULL,TRUE);
 }
@@ -464,10 +523,7 @@ static void ui_refresh(void){
  double directRate=direct_status()==2?direct_rate():0;
  if(directRate>0)swprintf(previewRateText,32,L"%.0f",directRate);else if(measuring)swprintf(previewRateText,32,L"%.0f",delivered);else wcscpy(previewRateText,L"—");
  if(slow)wcscpy(outputText,ui_tr(L"GPU 성능 부족 · 생성 안 함",L"GPU too slow · not generating"));
- /* 1.8.5: the second number counts every shown frame, repeats included (11-09: "60.0 / 118.0" while generation was 0 and
-  * repeats 58.9). When the shortfall warning is on, or repeats are over 30% of the in-between frames, say so in the readout. */
- else if(detected.live&&active&&measuring&&(ui_shortfall.warn||(ui_counts.repeat_fps>=5&&ui_counts.repeat_fps>(ui_counts.gen_fps+ui_counts.repeat_fps)*.3)))
-  swprintf(outputText,100,ui_tr(L"%ls / %ls fps · 생성 부족",L"%ls / %ls fps · generation short"),sourceRateText,previewRateText);
+ /* 2.2.4 (11-14 user): no "· 생성 부족" in the readout any more; it shows the numbers only (the settings window keeps its note). */
  /* 2.0.7 (11-11 user: the readout "59.9 / 119.9" differs from the pictures really shown): add the game frame rate (changed
   * images in) and the new pictures shown per second (CsShownMeter) while generating; GTA5 quality mode without 30 fps
   * smoothing reads "게임 30 → 새 화면 60", with it 120. Hidden while either is stale (still picture, under 3 s). */
@@ -539,7 +595,7 @@ static void ui_refresh(void){
   int fits=detected.live&&hz>0&&detected.tn>0&&detected.td>0&&(long long)hz*detected.td%detected.tn==0;
   /* 1.8.6 (11-09 user decision): full screen opens even when the target does not divide the refresh rate (e.g. 120 fps on
    * 160 Hz); frames then hold one or two refreshes in turn, so motion is a little uneven, but latency is still the shorter one. */
-  direct_ui_sync((ui_saved_display||ui_lowview)&&detected.live&&(detected.tn>0||ui_lowview),ui_direct_reopen);ui_direct_reopen=0;
+  direct_ui_sync((ui_act_display||ui_act_lowview)&&detected.live&&(detected.tn>0||ui_act_lowview),ui_direct_reopen);ui_direct_reopen=0;
   LONG shown=direct_status();wchar_t displayText[160];
   if(!ui_display)wcscpy(displayText,ui_stable?ui_tr(L"안정 우선은 지연이 길어 전체 화면을 권장합니다 · 창은 Streaming Center 화면 유지",L"Stable adds latency · full screen recommended · a window keeps the Streaming Center view"):ui_tr(L"Streaming Center 화면을 보며 창 이동 가능 · 전체 화면보다 지연이 깁니다",L"Movable window in Streaming Center · more latency than full screen"));
   else if(shown==-1&&ui_saved_display)wcscpy(displayText,ui_tr(L"전체 화면 표시 실패 · 창으로 표시 중 · 적용을 누르면 다시 시도합니다.",L"Full screen failed · showing a window · press Apply to retry."));
@@ -550,7 +606,7 @@ static void ui_refresh(void){
  EnableWindow(ui_items[143],valid&&!(recording&&rateDirty));
  POINT point;GetCursorPos(&point);HWND hover=WindowFromPoint(point);if(hover!=ui_hover){if(ui_hover&&IsWindow(ui_hover)&&(GetParent(ui_hover)==ui_panel||GetParent(ui_hover)==ui_popup))InvalidateRect(ui_hover,NULL,FALSE);ui_hover=hover;if(GetParent(hover)==ui_panel||GetParent(hover)==ui_popup)InvalidateRect(hover,NULL,FALSE);}ui_position();ui_tip_update();
 }
-static void ui_invalidate(void){for(int i=0;i<190;i++)if(ui_items[i])InvalidateRect(ui_items[i],NULL,FALSE);ui_refresh();}
+static void ui_invalidate(void){for(int i=0;i<200;i++)if(ui_items[i])InvalidateRect(ui_items[i],NULL,FALSE);ui_refresh();}
 #include "diagnostics.h"
 #include "recommend.h"
 /* Generation buffer slider: low latency 15-25 ms in 1 ms steps, stable auto/50/100/150. Applied with the Apply button like other choices. */
@@ -612,6 +668,24 @@ static LRESULT CALLBACK ui_slider_proc(HWND window,UINT message,WPARAM wp,LPARAM
  }
  return DefWindowProcW(window,message,wp,lp);
 }
+/* 2.2.4 (11-14 user): the settings window only chooses and saves. Choices reach the running preview when frame generation is
+ * turned on with the toolbar button or the shortcut: model, rate and latency, the full screen window and the low latency view.
+ * Apply while generation is on keeps them pending (no window opens over the game). ui_act_*: what the running session uses. */
+static void ui_publish_saved(void){
+ AcquireSRWLockExclusive(&auto_lock);auto_mode=ui_saved_mode;auto_mult=ui_saved_mult;auto_target=ui_saved_target;ReleaseSRWLockExclusive(&auto_lock);
+ LONG prior,next;do{prior=ui_requested();next=(prior&~(4|(255<<8)|(255<<16)))|(ui_saved_stable?4:0)|(ui_buffer_bits(ui_saved_stable,ui_saved_buffer,ui_saved_low_buffer)<<8)|(ui_saved_model<<16);}while(InterlockedCompareExchange(&control_bits,next,prior)!=prior);
+ /* 1.9.6 (11-10 office): a new start always retries after a "GPU too slow" stop. */
+ memset(&ui_slow_key,0xFF,sizeof ui_slow_key);ui_counts=(CsCountWindow){0};ui_apply_pending=0;
+ logline("UI_SETTINGS_PUBLISHED model=%s target=%d mode=%d multiplier=%d stable=%d display=%d low_view=%d",cs_models[ui_saved_model].name,ui_saved_out,ui_saved_mode,ui_saved_mult,ui_saved_stable,ui_saved_display,ui_lowview);
+}
+/* Toolbar button / shortcut. Turning on publishes pending choices and opens full screen or low latency view if chosen. */
+static void ui_toggle_generation(const char *how){
+ LARGE_INTEGER now;QueryPerformanceCounter(&now);int on=!(ui_requested()&1);
+ if(on){if(ui_apply_pending)ui_publish_saved();ui_act_display=ui_saved_display;ui_act_lowview=ui_lowview;InterlockedExchange(&low_view,ui_act_lowview);ui_direct_reopen=1;}
+ InterlockedExchange64(&toggle_qpc,now.QuadPart);InterlockedXor(&control_bits,1);LONG serial=InterlockedIncrement(&toggle_serial);
+ if(!on){ui_act_lowview=0;InterlockedExchange(&low_view,0);}
+ logline("UI_TOGGLE enabled=%d serial=%ld qpc=%lld by=%s display=%d low_view=%d",!!(ui_requested()&1),serial,(long long)now.QuadPart,how,ui_act_display,ui_act_lowview);
+}
 static LRESULT CALLBACK ui_proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
  switch(message){
  case WM_MEASUREITEM:{MEASUREITEMSTRUCT *m=(MEASUREITEMSTRUCT*)lp;if(m->CtlType==ODT_MENU){m->itemWidth=ui_px(m->itemID>=400?200:304);m->itemHeight=ui_px(42);return TRUE;}break;}
@@ -626,7 +700,7 @@ static LRESULT CALLBACK ui_proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
   if(HIWORD(wp)!=BN_CLICKED)break;
   if((id==101||id==102)&&ui_tipwin){ShowWindow(ui_tipwin,SW_HIDE);ui_tip_since=GetTickCount64()+86400000ULL;} /* no tip again until the pointer leaves */
   switch(id){
-   case 101:case 111:{LARGE_INTEGER now;QueryPerformanceCounter(&now);InterlockedExchange64(&toggle_qpc,now.QuadPart);InterlockedXor(&control_bits,1);LONG serial=InterlockedIncrement(&toggle_serial);logline("UI_TOGGLE enabled=%d serial=%ld qpc=%lld",!!(ui_requested()&1),serial,(long long)now.QuadPart);break;}
+   case 101:ui_toggle_generation(lp==0?"shortcut":"button");break;
    case 102:ui_menu(!ui_expanded);return 0;
    case 157:diag_export(ui_popup,&ui_counts);return 0;
    case 174:ui_reco_start();return 0;
@@ -636,7 +710,9 @@ static LRESULT CALLBACK ui_proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
     if(choice>=400&&choice<=403){InterlockedExchange(&ui_fps_corner,choice-400);ui_save_fps();}break;}
    case 189:ui_fps_game=!ui_fps_game;ui_save_fps();break;
    case 179:ui_sharpen=!ui_sharpen;InterlockedExchange(&direct_sharpen,ui_sharpen);ui_save_sharpen();break;
-   case 186:ui_lowview=!ui_lowview;InterlockedExchange(&low_view,ui_lowview);ui_save_lowview();ui_direct_reopen=1;break;
+   case 196:ui_hot_capture=1;ui_hot_register();SetFocus(ui_items[196]);break;
+   case 191:case 192:case 193:ui_sync=id-191;InterlockedExchange(&direct_sync,ui_sync);ui_save_sync();break;
+   case 186:ui_lowview=!ui_lowview;ui_save_lowview();break; /* 2.2.4: takes effect at the next turn-on */
    case 161:ui_cadence=!ui_cadence;ui_save_options();break;
    case 163:ui_hudkeep=!ui_hudkeep;ui_save_options();break;
    case 168:ui_gpukeep=!ui_gpukeep;ui_save_options();break;
@@ -659,17 +735,10 @@ static LRESULT CALLBACK ui_proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
    case 139:case 142:{int next=ui_target+(id==139?-1:1);AutoRate a=auto_snapshot();int min=a.live?a.sn/a.sd+1:30,max=a.live?4*a.sn/a.sd:240;if(next<min)next=min;if(next>max)next=max;wchar_t text[20];swprintf(text,20,L"%d",next);SetWindowTextW(ui_items[138],text);break;}
    case 140:{HMENU menu=CreatePopupMenu();AppendMenuW(menu,MF_OWNERDRAW,300,ui_tr(L"낮은 지연",L"Low latency"));AppendMenuW(menu,MF_OWNERDRAW,301,ui_tr(L"안정 우선",L"Stable"));RECT r;GetWindowRect(ui_items[140],&r);int choice=TrackPopupMenu(menu,TPM_RETURNCMD|TPM_NONOTIFY,r.left,r.bottom,0,window,NULL);DestroyMenu(menu);if(choice==300||choice==301)ui_stable=choice==301;break;}
    case 143:if(IsWindowEnabled(ui_items[143])&&ui_preferences(1)){
-    /* Publish the complete preference tuple together. The streaming callback
-     * bypasses old caps and reconfigures its existing engine after negotiation. */
-    AcquireSRWLockExclusive(&auto_lock);auto_mode=ui_saved_mode;auto_mult=ui_saved_mult;auto_target=ui_saved_target;ReleaseSRWLockExclusive(&auto_lock);
-    LONG prior,next;do{prior=ui_requested();next=(prior&~(4|(255<<8)|(255<<16)))|(ui_saved_stable?4:0)|(ui_buffer_bits(ui_saved_stable,ui_saved_buffer,ui_saved_low_buffer)<<8)|(ui_saved_model<<16);}while(InterlockedCompareExchange(&control_bits,next,prior)!=prior);
-    /* 1.9.6 (11-10 office): Apply always retries after a "GPU too slow" stop. Before, the stop held until a value inside
-     * the slow key changed, so Apply with the same choices did nothing and only the toolbar off/on restarted generation. */
-    memset(&ui_slow_key,0xFF,sizeof ui_slow_key);
-    ui_direct_reopen=1;logline("UI_DISPLAY_APPLY mode=%d",ui_saved_display);
-    logline("UI_MODEL_APPLY model=%s",cs_models[ui_saved_model].name);
-    ui_counts=(CsCountWindow){0};
-    logline("UI_RATE_APPLY input=auto target=%d mode=%d multiplier=%d stable=%d enabled=%d",ui_saved_out,ui_mode,ui_mult,ui_saved_stable,!!(ui_requested()&1));
+    /* 2.2.4 (11-14 user): Apply saves. While generation is off the choices are published at once (nothing on screen changes);
+     * while it is on they wait for the next turn-on with the toolbar button or the shortcut. */
+    if(ui_requested()&1){ui_apply_pending=1;logline("UI_APPLY_SAVED pending=1 (takes effect at the next turn-on)");}
+    else ui_publish_saved();
    }break;
   }ui_invalidate();return 0;}
  case UI_RECO_DONE:ui_reco_finish();return 0;
@@ -680,22 +749,23 @@ static LRESULT CALLBACK ui_proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
   ui_menu(0);
 #endif
   return 0;}break;
+ case WM_HOTKEY:if(window==ui_panel&&wp==1){logline("UI_HOTKEY_PRESSED");SendMessageW(ui_panel,WM_COMMAND,MAKEWPARAM(101,BN_CLICKED),0);}return 0;
  case WM_TIMER:if(!IsWindow(ui_parent)){DestroyWindow(ui_panel);return 0;}ui_refresh();return 0;
  case WM_CTLCOLOREDIT:SetTextColor((HDC)wp,UI_TEXT);SetBkColor((HDC)wp,UI_HOVER);return (LRESULT)ui_field_brush;
- case WM_CTLCOLORSTATIC:{int id=GetDlgCtrlID((HWND)lp);COLORREF bg=id==120||id==147?UI_TOOLBAR:id==121?UI_BUTTON:id==105||id==108?RGB(38,38,38):UI_BG;SetTextColor((HDC)wp,id==105||id==108||id==125||id==126||id==127||id==146||id==151||id==156||id==164||id==166||id==183||id==184?UI_MUTED:UI_TEXT);SetBkColor((HDC)wp,bg);return (LRESULT)(id==120||id==147?ui_head_brush:id==121?ui_nav_brush:id==105||id==108?ui_main_brush:ui_brush);}
+ case WM_CTLCOLORSTATIC:{int id=GetDlgCtrlID((HWND)lp);COLORREF bg=id==120||id==147?UI_TOOLBAR:id==121?UI_BUTTON:id==105||id==108?RGB(38,38,38):UI_BG;SetTextColor((HDC)wp,id==105||id==108||id==125||id==126||id==127||id==146||id==151||id==156||id==164||id==166||id==183||id==184||id==194||id==197?UI_MUTED:UI_TEXT);SetBkColor((HDC)wp,bg);return (LRESULT)(id==120||id==147?ui_head_brush:id==121?ui_nav_brush:id==105||id==108?ui_main_brush:ui_brush);}
  case WM_ERASEBKGND:return 1;
  case WM_PAINT:{PAINTSTRUCT p;HDC dc=BeginPaint(window,&p);RECT r;GetClientRect(window,&r);ui_fill(dc,r,window==ui_panel?UI_TOOLBAR:RGB(38,38,38));
   if(window==ui_meter)ui_fill(dc,r,UI_TOOLBAR);
   if(window==ui_popup){RECT header={0,0,r.right,ui_px(64)},side={0,ui_px(64),ui_px(210),r.bottom};ui_fill(dc,header,UI_TOOLBAR);ui_fill(dc,side,UI_TOOLBAR);
    /* 1.9.8: cards of the selected tab (top, bottom pairs in 96-dpi units). */
-   static const short cards[3][8]={{78,428,440,640,652,740,0,0},{78,236,244,336,344,408,416,540},{78,184,192,276,284,368,382,476}};
+   static const short cards[3][10]={{78,428,440,640,652,740,0,0,0,0},{78,236,244,336,344,408,416,540,548,708},{78,184,192,276,284,368,382,476,484,592}};
    HBRUSH b=CreateSolidBrush(UI_BG),old=SelectObject(dc,b);HGDIOBJ pen=SelectObject(dc,GetStockObject(NULL_PEN));
-   for(int i=0;i<8&&cards[ui_tab][i];i+=2)RoundRect(dc,ui_px(232),ui_px(cards[ui_tab][i]),ui_px(868),ui_px(cards[ui_tab][i+1]),ui_px(22),ui_px(22));
+   for(int i=0;i<10&&cards[ui_tab][i];i+=2)RoundRect(dc,ui_px(232),ui_px(cards[ui_tab][i]),ui_px(868),ui_px(cards[ui_tab][i+1]),ui_px(22),ui_px(22));
    SelectObject(dc,old);SelectObject(dc,pen);DeleteObject(b);
    b=CreateSolidBrush(UI_LINE);FrameRect(dc,&r,b);DeleteObject(b);
    if(ui_tab==2){RECT split={ui_px(520),ui_px(92),ui_px(520)+ui_px(1),ui_px(156)};ui_fill(dc,split,RGB(70,70,70));} /* 1.7.3: divider between the 30fps and HUD columns */
   }EndPaint(window,&p);return 0;}
- case WM_DESTROY:if(window==ui_panel){InterlockedExchange(&auto_stopping,1);KillTimer(window,1);if(ui_tip)DestroyWindow(ui_tip);if(ui_tipwin)DestroyWindow(ui_tipwin);if(ui_tip_font)DeleteObject(ui_tip_font);if(ui_meter)DestroyWindow(ui_meter);if(ui_full_meter)DestroyWindow(ui_full_meter);if(ui_popup)DestroyWindow(ui_popup);PostQuitMessage(0);}return 0;
+ case WM_DESTROY:if(window==ui_panel){UnregisterHotKey(ui_panel,1);InterlockedExchange(&auto_stopping,1);KillTimer(window,1);if(ui_tip)DestroyWindow(ui_tip);if(ui_tipwin)DestroyWindow(ui_tipwin);if(ui_tip_font)DeleteObject(ui_tip_font);if(ui_meter)DestroyWindow(ui_meter);if(ui_full_meter)DestroyWindow(ui_full_meter);if(ui_popup)DestroyWindow(ui_popup);PostQuitMessage(0);}return 0;
  }return DefWindowProcW(window,message,wp,lp);
 }
 static HWND ui_child(HWND parent,const wchar_t *klass,const wchar_t *text,DWORD style,int id){HWND w=CreateWindowExW(0,klass,text,WS_CHILD|WS_VISIBLE|style,0,0,1,1,parent,(HMENU)(INT_PTR)id,GetModuleHandleW(NULL),NULL);ui_items[id]=w;return w;}
@@ -729,7 +799,10 @@ static DWORD WINAPI ui_main(void *unused){
  ui_child(ui_popup,L"BUTTON",ui_tr(L"프레임 표시 꺼짐",L"FPS display off"),button,144);
  ui_child(ui_popup,L"STATIC",ui_tr(L"게임 실제 프레임으로 표시",L"Show the game's real frame rate"),0,188);ui_child(ui_popup,L"BUTTON",ui_tr(L"게임 실제 프레임",L"Game frame rate"),button,189);
  ui_child(ui_popup,L"STATIC",ui_tr(L"전체 화면 선명하게 (확대·선명화)",L"Sharpen full screen (upscale)"),0,178);ui_child(ui_popup,L"BUTTON",ui_tr(L"전체 화면 선명하게",L"Sharpen full screen"),button,179);
- ui_child(ui_popup,L"STATIC",ui_tr(L"저지연 보기 (베타)",L"Low latency view (beta)"),0,185);ui_child(ui_popup,L"BUTTON",ui_tr(L"저지연 보기",L"Low latency view"),button,186);ui_child(ui_popup,L"STATIC",ui_tr(L"전체 화면으로 들어온 화면을 바로 보여 줘요(생성 꺼도 동작).\r\n켜 두면 녹화·방송에는 화면이 들어가지 않아요.",L"Shows the picture in full screen as soon as it arrives (also with generation off).\r\nWhile on, recording and streaming get no picture."),0,187);
+ ui_child(ui_popup,L"STATIC",ui_tr(L"켜기/끄기 단축키",L"On/off shortcut"),0,195);ui_child(ui_popup,L"BUTTON",L"",button,196);ui_child(ui_popup,L"STATIC",L"",0,197);
+ ui_child(ui_popup,L"STATIC",ui_tr(L"화면 동기화 (창·전체 화면)",L"Display sync (window and full screen)"),0,190);ui_child(ui_popup,L"BUTTON",ui_tr(L"수직 동기화",L"V-Sync"),button,191);ui_child(ui_popup,L"BUTTON",ui_tr(L"가변 주사율",L"Variable refresh"),button,192);ui_child(ui_popup,L"BUTTON",ui_tr(L"끔",L"Off"),button,193);
+ ui_child(ui_popup,L"STATIC",ui_tr(L"가변 주사율: G-Sync·FreeSync 모니터에서 고르게 (창은 NVIDIA 창 모드 G-Sync)\r\n끔: 바로 표시해 지연이 가장 짧음 · 전체 화면은 찢어질 수 있음",L"Variable refresh: even on G-Sync/FreeSync monitors (window: NVIDIA windowed G-Sync)\r\nOff: shown at once, lowest delay · full screen may tear"),0,194);
+ ui_child(ui_popup,L"STATIC",ui_tr(L"저지연 보기 (베타)",L"Low latency view (beta)"),0,185);ui_child(ui_popup,L"BUTTON",ui_tr(L"저지연 보기",L"Low latency view"),button,186);ui_child(ui_popup,L"STATIC",ui_tr(L"켜기 버튼·단축키를 누르면 전체 화면으로 들어온 화면을 바로 보여 줘요.\r\n보는 동안 녹화·방송에는 화면이 들어가지 않아요.",L"With the on button or shortcut, shows the picture in full screen as soon as it arrives.\r\nWhile shown, recording and streaming get no picture."),0,187);
  WNDCLASSW slider={0};slider.lpfnWndProc=ui_slider_proc;slider.hInstance=module;slider.lpszClassName=L"ConsoleSmooth.Slider";slider.hCursor=LoadCursorW(NULL,(LPCWSTR)IDC_ARROW);RegisterClassW(&slider);
  ui_child(ui_popup,slider.lpszClassName,ui_tr(L"생성 버퍼",L"Generation buffer"),WS_TABSTOP,158);ui_child(ui_popup,ui_label_class(159),L"",0,159);
  ui_child(ui_popup,L"STATIC",ui_tr(L"녹화 소스",L"Recording source"),0,148);ui_child(ui_popup,L"BUTTON",ui_tr(L"원본",L"Original"),button,149);ui_child(ui_popup,L"BUTTON",ui_tr(L"생성 프레임 포함",L"With generated"),button,150);ui_child(ui_popup,ui_label_class(151),L"",0,151);
@@ -746,11 +819,11 @@ static DWORD WINAPI ui_main(void *unused){
  WNDCLASSW tip={0};tip.lpfnWndProc=ui_tip_proc;tip.hInstance=module;tip.lpszClassName=L"ConsoleSmooth.Tip";tip.hCursor=LoadCursorW(NULL,(LPCWSTR)IDC_ARROW);RegisterClassW(&tip);
  ui_tipwin=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE,tip.lpszClassName,L"",WS_POPUP,0,0,1,1,ui_parent,NULL,module,NULL);
  {wchar_t title[64];swprintf(title,64,ui_tr(L"프레임 생성 · %hs",L"Frame generation · %hs"),CS_PLUGIN_VERSION);SetWindowTextW(ui_items[120],title);} /* version in the settings title */
- ui_tab_apply();ui_dpi=0;ui_position();SetTimer(ui_panel,1,200,NULL);ui_refresh();logline("UI_ATTACHED pid=%lu style=native-large source=%d target=%d",GetCurrentProcessId(),framegen_fps,framegen_output_fps);
+ ui_hot_register();ui_tab_apply();ui_dpi=0;ui_position();SetTimer(ui_panel,1,200,NULL);ui_refresh();logline("UI_ATTACHED pid=%lu style=native-large source=%d target=%d",GetCurrentProcessId(),framegen_fps,framegen_output_fps);
 #ifdef CS_UI_PREVIEW
  ui_text(ui_items[120],ui_tr(L"프레임 생성 · 설정 미리보기",L"Frame generation · preview"));ui_menu(1);
 #endif
- MSG msg;while(GetMessageW(&msg,NULL,0,0)>0){if(msg.message==WM_KEYDOWN&&msg.wParam==VK_ESCAPE&&ui_expanded){ui_menu(0);SetFocus(ui_settings);continue;}if(!IsDialogMessageW(ui_expanded?ui_popup:ui_panel,&msg)){TranslateMessage(&msg);DispatchMessageW(&msg);}}
+ MSG msg;while(GetMessageW(&msg,NULL,0,0)>0){if(ui_hot_key(&msg))continue;if(msg.message==WM_KEYDOWN&&msg.wParam==VK_ESCAPE&&ui_expanded){ui_menu(0);SetFocus(ui_settings);continue;}if(!IsDialogMessageW(ui_expanded?ui_popup:ui_panel,&msg)){TranslateMessage(&msg);DispatchMessageW(&msg);}}
  if(ui_meter_font)DeleteObject(ui_meter_font);DeleteObject(ui_font);DeleteObject(ui_small);DeleteObject(ui_heading);DeleteObject(ui_latin);DeleteObject(ui_brush);DeleteObject(ui_head_brush);DeleteObject(ui_field_brush);DeleteObject(ui_main_brush);DeleteObject(ui_nav_brush);if(ui_font_path[0])RemoveFontResourceExW(ui_font_path,FR_PRIVATE,NULL);logline("UI_STOP");return 0;
 }
 static void start_ui(void){static LONG started;if(!interactive_ui||InterlockedExchange(&started,1))return;HANDLE thread=CreateThread(NULL,0,ui_main,NULL,0,NULL);if(thread)CloseHandle(thread);}

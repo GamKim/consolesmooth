@@ -279,7 +279,10 @@ static void on_link(void *self,uint64_t ts,void *src,void *sink,int result){
  }
  if(vblank_pacing&&result==0&&b&&strstr(b,"/GstD3D11VideoSink:"))pace_sink(sink);
  if(stage_mode&&result==0&&b&&strstr(b,"/GstBin:")&&strstr(b,"/GstD3D11VideoSink:"))stage_attach(sink,"sink_out");
- if(result==0&&a&&b&&((strstr(a,"/GstKsVideoSrc:")&&strstr(b,"/GstCapsFilter:"))||strstr(a,"/GstMFVideoSrc:")))auto_watch_capture(src);
+ if(result==0&&a&&b&&((strstr(a,"/GstKsVideoSrc:")&&strstr(b,"/GstCapsFilter:"))||strstr(a,"/GstMFVideoSrc:"))){auto_watch_capture(src);
+  /* 2.2.4: the pipeline holding the capture source feeds the large preview (a detached GstBin, no pipeline in its path) and
+   * recording; scene previews get the capture through proxies. It is the main generation pipeline (framegen.h main_pipe). */
+  if(!strncmp(a,"/GstPipeline:",13)){char *e=strstr(a+1,"/");size_t n=e?(size_t)(e-a)+1:0;if(n&&n<sizeof main_pipe){AcquireSRWLockExclusive(&main_pipe_lock);memcpy(main_pipe,a,n);main_pipe[n]=0;ReleaseSRWLockExclusive(&main_pipe_lock);logline("FG_MAIN_PIPELINE %s",main_pipe);}}}
  if(framegen_fps&&result==0&&a&&b&&strncmp(a,"/GstPipeline:",13)==0&&strstr(a,"/GstProxySrc:")&&strstr(b,"/GstAvtD3D11Transformation:"))record_watch(src,sink);
  /* Visual synthetic testing identified the root pipeline sink as the scene
   * thumbnail; the detached GstBin sink is the large editor preview. */
@@ -352,7 +355,7 @@ static int init(void *plugin){
  stage_init(gst,go);
  tl_init();
  if(GetEnvironmentVariableW(L"CS_TEST_DIRECT_WIN",mode,16)-1u<15u)direct_win_w=_wtoi(mode);
- no_thumb=GetEnvironmentVariableW(L"CS_TEST_NO_THUMB",mode,16)==1&&mode[0]==L'1';idle_all=GetEnvironmentVariableW(L"CS_TEST_IDLE_ALL",mode,16)==1&&mode[0]==L'1';logline("TEST_DISPLAY direct_win=%d no_thumb=%d",direct_win_w,no_thumb);
+ no_thumb=GetEnvironmentVariableW(L"CS_TEST_NO_THUMB",mode,16)==1&&mode[0]==L'1';idle_all=GetEnvironmentVariableW(L"CS_TEST_IDLE_ALL",mode,16)==1&&mode[0]==L'1';all_groups=GetEnvironmentVariableW(L"CS_TEST_ALL_GROUPS",mode,16)==1&&mode[0]==L'1';logline("TEST_DISPLAY direct_win=%d no_thumb=%d",direct_win_w,no_thumb);
  comp_latency_init(gst);
  keep_rate_without_signal=GetEnvironmentVariableW(L"CS_TEST_KEEP_RATE",mode,16)==1&&mode[0]==L'1';
  /* 1.6.4: output spacing on by default; CS_TEST_SPACING=0 turns it off. */

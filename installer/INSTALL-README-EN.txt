@@ -17,7 +17,8 @@ Install
    The installer adds "consolesmooth" to your user environment variable GST_TRACERS. From Streaming Center 1.9.19.1 on,
    this is how the plugin starts. Other programs are not affected; uninstalling removes it and keeps any other value.
 3. Press Done and start Streaming Center with its usual icon.
-4. Two buttons appear on the toolbar: "Turn frame generation on" and "Frame generation settings". Press the first to turn it on (it starts off).
+4. Two buttons appear on the toolbar: "Turn frame generation on" and "Frame generation settings". Press the first, or the shortcut (default Ctrl+Alt+F), to turn it on (it starts off).
+   The settings window chooses and saves with Apply; choices take effect when you turn it on (applied while on: at the next turn-on).
    The second opens the settings window.
 
 Settings (frame generation settings window)
@@ -38,8 +39,10 @@ Settings (frame generation settings window)
 - Recording source: Original or With generated frames, from the next recording.
 - Sharpen full screen (display tab, off by default): sharper upscale and sharpening in full screen.
 - Display: Window or Full screen. Play while watching the preview; full screen has less display latency.
-- Low latency view (beta, off by default): shows the incoming picture in full screen right away (also with generation off). While it is on, recording and streaming get no picture.
-- Recommended: tries RIFE and FSR 3 on your PC for about 25 s and suggests a model and multiplier.
+- Low latency view (beta, off by default): when turned on with the button or shortcut, shows the incoming picture in full screen right away. While shown, recording and streaming get no picture.
+- Display sync (window and full screen): V-Sync (default, no tearing) / Variable refresh (even on G-Sync/FreeSync monitors; the window needs NVIDIA "windowed and full screen" G-Sync) / Off (lowest delay, full screen may tear).
+- On/off shortcut (Advanced tab, default Ctrl+Alt+F): click it and press a new combination with Ctrl or Alt; Backspace = no shortcut, Esc = cancel.
+- Recommended: tries RIFE and FSR 3 on your PC for about 25 s and suggests model, multiplier, latency and display sync; RIFE only with enough headroom. Shows the GPU name, and suggests Variable refresh when the monitor appears to support it.
 - Keep GPU clock up (on by default for AMD): keeps the GPU from lowering its clock while generating.
 - Export diagnostics: saves one text file to send when something goes wrong. Nothing is sent automatically.
 - Recording with generated frames: raise the Streaming Center recording video bitrate to 40000-50000 kbps; 120 fps at the default 15000 smears detail.
