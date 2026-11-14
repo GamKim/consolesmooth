@@ -5,7 +5,8 @@
  * Composed: Flip, about 2 refreshes behind). Pacing stays with the large preview sink's phase lock.
  * Esc, or another program becoming active on the same monitor, closes the window and the host's preview carries on
  * (1.8.4, 11-09 user: clicking a window on another monitor closed it; that now keeps it open); turning generation
- * off and on, or Apply, opens it again. No signal or a changed frame size closes it until frames return.
+ * off and on, or Apply, opens it again. 2.2.5 (11-14 user): Esc also turns generation off, so one press of the button or
+ * shortcut turns it back on in full screen; losing focus still only closes the window. No signal or a changed frame size closes it until frames return.
  * CS_TEST_DIRECT=1 keeps the test behaviour: closes only on Esc or after 300 s.
  * The fps readout is drawn into the frame: a window above this one would make Windows compose it again.
  * direct_state: 0 idle, 1 starting, 2 ready, -1 failed, -2 closed by the user, -3 waiting for frames.
@@ -109,6 +110,7 @@ static LRESULT CALLBACK direct_proc(HWND w,UINT m,WPARAM a,LPARAM b){
   if(!at||at!=direct_monitor)return 0; /* other monitor (or a transition): stay */
   logline("DIRECT_FOCUS_SAME_MONITOR");}
  int leaving=m==WM_TIMER||m==WM_CLOSE||(m==WM_KEYDOWN&&a==VK_ESCAPE);
+ if(leaving&&m==WM_KEYDOWN&&!direct_forced&&ui_panel)PostMessageW(ui_panel,UI_ESC_OFF,0,0); /* 2.2.5: Esc = turn generation off */
  if(leaving){logline("DIRECT_CLOSE message=%u",m);if(InterlockedCompareExchange(&direct_state,0,0)>=0)InterlockedExchange(&direct_state,-2);PostQuitMessage(0);return 0;}
  if(m==DIRECT_CLOSE_MESSAGE){logline("DIRECT_CLOSE state=%ld",direct_state);PostQuitMessage(0);return 0;}
  if(m==WM_SETCURSOR){SetCursor(NULL);return 1;}

@@ -8,7 +8,7 @@ A personal project, not affiliated with or endorsed by AVerMedia. No AVerMedia s
 
 ## Features
 
-- **Runs inside Streaming Center**: turn it on and off from the toolbar or a shortcut (default Ctrl+Alt+F, changeable in the Advanced tab), no window capture or overlay. The settings window only chooses and saves; choices take effect when you turn it on.
+- **Runs inside Streaming Center**: turn it on and off from the toolbar or a shortcut (default Ctrl+Alt+F, changeable in the Advanced tab), no window capture or overlay. In full screen, Esc closes it and turns generation off. The settings window only chooses and saves; choices take effect when you turn it on.
 - **Records generated frames**: set the recording source to "With generated frames" for files at the output rate (e.g. 120/160 fps). For a 30 fps game the file is still 120 fps, but the new pictures are game fps x multiplier (60 per second at 2x).
 - **Two models**: RIFE 4.6 (default, quality) and AMD FSR 3 (2x and 4x, light).
 - **HUD protection**: fixed HUD (health bars, maps, button labels, including semi-transparent ones) is kept from the original.

@@ -22,6 +22,7 @@ static void ui_publish_buffer(double ms){AcquireSRWLockExclusive(&status_lock);u
 static ULONGLONG ui_stats_updated;
 static CsCountWindow ui_counts;
 static LONG ui_meter_mode=-1;
+#define UI_ESC_OFF (WM_APP+8)
 static HWND ui_panel,ui_popup,ui_parent,ui_toggle,ui_settings,ui_tip,ui_hover;
 static HWND ui_meter,ui_full_meter;
 static wchar_t ui_full_text[100];
@@ -749,6 +750,8 @@ static LRESULT CALLBACK ui_proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
   ui_menu(0);
 #endif
   return 0;}break;
+ /* 2.2.5 (11-14 user): Esc in the full screen window turns generation off, so one press of the button or shortcut opens it again. */
+ case UI_ESC_OFF:if(window==ui_panel&&(ui_requested()&1)){logline("UI_ESCAPE_OFF");SendMessageW(ui_panel,WM_COMMAND,MAKEWPARAM(101,BN_CLICKED),(LPARAM)ui_toggle);}return 0;
  case WM_HOTKEY:if(window==ui_panel&&wp==1){logline("UI_HOTKEY_PRESSED");SendMessageW(ui_panel,WM_COMMAND,MAKEWPARAM(101,BN_CLICKED),0);}return 0;
  case WM_TIMER:if(!IsWindow(ui_parent)){DestroyWindow(ui_panel);return 0;}ui_refresh();return 0;
  case WM_CTLCOLOREDIT:SetTextColor((HDC)wp,UI_TEXT);SetBkColor((HDC)wp,UI_HOVER);return (LRESULT)ui_field_brush;

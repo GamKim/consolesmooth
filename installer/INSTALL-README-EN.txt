@@ -40,7 +40,7 @@ Settings (frame generation settings window)
 - Latency priority (under Latency, off by default, RIFE only): computes motion at 1/4 size for a slightly smaller buffer (RTX 5080: 16.2 ms) at about 0.9 dB lower quality.
 - Recording source: Original or With generated frames, from the next recording.
 - Sharpen full screen (display tab, off by default): sharper upscale and sharpening in full screen.
-- Display: Window or Full screen. Play while watching the preview; full screen has less display latency.
+- Display: Window or Full screen (Esc closes it and turns frame generation off; turning it on again opens full screen). Play while watching the preview; full screen has less display latency.
 - Low latency view (beta, off by default): when turned on with the button or shortcut, shows the incoming picture in full screen right away. While shown, recording and streaming get no picture.
 - Display sync (window and full screen): V-Sync (default, no tearing) / Variable refresh (even on G-Sync/FreeSync monitors; the window needs NVIDIA "windowed and full screen" G-Sync) / Off (lowest delay, full screen may tear).
 - On/off shortcut (Advanced tab, default Ctrl+Alt+F): click it and press a new combination with Ctrl or Alt; Backspace = no shortcut, Esc = cancel.
