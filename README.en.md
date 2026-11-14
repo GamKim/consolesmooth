@@ -22,6 +22,7 @@ A personal project, not affiliated with or endorsed by AVerMedia. No AVerMedia s
 - An AVerMedia capture card + Streaming Center 1.8.22.2 or the latest 1.9.19.1, x64 (tested: Live Gamer 4K GC573, GC313 Pro, GC553 Pro)
 - Windows x64 and a Vulkan GPU. Minimum: **AMD Radeon RX 6600** (1080p 60 → 120 fps); on GeForce about RTX 2060 class (approximate test).
 - A monitor of 120 Hz or more
+- For 120 fps input, use "Target fps" set to your monitor's refresh rate instead of a multiplier (for example 160 on a 160 Hz monitor). 2x (240 fps) cannot all be shown on a 160 Hz monitor, and in the settings' full screen view the generated frames are mostly not shown.
 - For 120 fps recordings raise the Streaming Center recording bitrate to 40-50 Mbps (15 Mbps smears detail).
 
 ## Install
