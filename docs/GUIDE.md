@@ -4,7 +4,7 @@
 
 Follow these steps in order. If something doesn't work, jump to [Troubleshooting](#troubleshooting).
 
-The screenshots show the Korean interface. The interface follows your Streaming Center language, so with an English Streaming Center you see the English labels written in this guide.
+The installer and the settings window are in English unless your Streaming Center is set to Korean.
 
 ## 1. What you need
 
@@ -28,12 +28,14 @@ Nothing on the console (Switch, PS5) is changed. Only the captured picture on yo
 
 > **Close Streaming Center completely first.** Closing the window may leave it running in the background. If it has an icon in the tray (bottom right, under ^), right-click it and exit, and check Task Manager (Ctrl+Shift+Esc) that Streaming Center is gone.
 
-![Installer](../media/images/installer-guide.png)
+![Installer](../media/images/installer-guide-en.png)
+
+(The installer's font draws the backslash in folder paths as ₩, so `C:₩Program Files` means `C:\Program Files`.)
 
 1. **① App to connect** should show your version, for example `AVerMedia Streaming Center 1.9.19.1`.
    - If it says "Install the official app first", or you installed Streaming Center somewhere else, click **Change** and pick the Streaming Center folder
      (default: `C:\Program Files (x86)\AVerMedia\AVerMedia Streaming Center`).
-2. Click **③ Install**. If it's already installed, the button says **Update** (the screenshot shows Update).
+2. Click **③ Install**. If it's already installed, the button says **Update**.
 3. When Windows **User Account Control** asks for permission, click **Yes**.
    - That prompt sometimes opens behind other windows. Look for a flashing shield icon on the taskbar.
 4. When the title changes to **"Installed"**, you're done. Click **Done**.
@@ -56,7 +58,7 @@ Nothing on the console (Switch, PS5) is changed. Only the captured picture on yo
    - Generation starts off.
 3. With your **console on and the game picture coming in**, click **Frame generation settings**.
 
-   ![Settings window](../media/images/%EC%84%A4%EC%A0%95%EC%B0%BD-%ED%94%84%EB%A0%88%EC%9E%84%EC%83%9D%EC%84%B1-1.0.1.png)
+   ![Settings window](../media/images/settings-frame-generation-en.png)
 
 4. Click **Recommended** at the bottom. For about 25 seconds it really generates frames on your PC, then suggests settings for your GPU and monitor (model, multiplier, latency, display sync). Please wait while it runs.
 5. In the result window click **Apply**, then close the settings window with **Close**.
