@@ -6,6 +6,8 @@ An **unofficial, free frame generation plugin for AVerMedia Streaming Center**. 
 
 A personal project, not affiliated with or endorsed by AVerMedia. No AVerMedia software or files are included.
 
+**First time? Follow the [step-by-step guide](docs/GUIDE.md)** (install, first run, settings, troubleshooting).
+
 ## Features
 
 - **Runs inside Streaming Center**: turn it on and off from the toolbar or a shortcut (default Ctrl+Alt+F, changeable in the Advanced tab), no window capture or overlay. In full screen, Esc closes it and turns generation off. The settings window only chooses and saves; choices take effect when you turn it on.
@@ -28,7 +30,7 @@ A personal project, not affiliated with or endorsed by AVerMedia. No AVerMedia s
 
 ## Install
 
-Download `ConsoleSmooth-Plugin-Setup-1.0.1.exe` from [Releases](https://github.com/GamKim/consolesmooth/releases) and run it. The installer is not signed; if SmartScreen warns, choose "More info" → "Run anyway". Usage: [installer/INSTALL-README-EN.txt](installer/INSTALL-README-EN.txt).
+Download `ConsoleSmooth-Plugin-Setup-1.0.1.exe` from [Releases](https://github.com/GamKim/consolesmooth/releases) and run it. The installer is not signed; if SmartScreen warns, choose "More info" → "Run anyway". Step by step with pictures: [docs/GUIDE.md](docs/GUIDE.md). Full option list: [installer/INSTALL-README-EN.txt](installer/INSTALL-README-EN.txt).
 
 ## Uninstall
 

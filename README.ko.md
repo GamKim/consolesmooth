@@ -6,6 +6,8 @@ AVerMedia Streaming Center용 **비공식·무료 프레임 생성 플러그인*
 
 AVerMedia와 관계없는 개인 프로젝트이며, AVerMedia의 프로그램이나 파일은 포함하지 않습니다.
 
+**처음 쓰시나요? [그림으로 보는 사용법](docs/GUIDE.ko.md)을 따라 해 보세요** (설치, 처음 켜기, 설정, 문제 해결).
+
 ## 특징
 
 - **Streaming Center 안에서 바로 동작**: 별도 창 캡처나 화면 덮기 없이, 툴바 버튼이나 단축키(기본 Ctrl+Alt+F, 고급 탭에서 바꿀 수 있음)로 켜고 끕니다. 전체 화면에서는 Esc로 닫으면서 끕니다. 설정 창에서는 고르고 저장만 하며, 켤 때 적용됩니다.
@@ -28,7 +30,7 @@ AVerMedia와 관계없는 개인 프로젝트이며, AVerMedia의 프로그램�
 
 ## 설치
 
-[Releases](https://github.com/GamKim/consolesmooth/releases)에서 `ConsoleSmooth-Plugin-Setup-1.0.1.exe`를 받아 실행합니다. 서명이 없는 설치 파일이라 SmartScreen 경고가 나오면 "추가 정보 → 실행"을 누릅니다. 자세한 사용법은 [installer/INSTALL-README.txt](installer/INSTALL-README.txt)에 있습니다.
+[Releases](https://github.com/GamKim/consolesmooth/releases)에서 `ConsoleSmooth-Plugin-Setup-1.0.1.exe`를 받아 실행합니다. 서명이 없는 설치 파일이라 SmartScreen 경고가 나오면 "추가 정보 → 실행"을 누릅니다. 그림으로 보는 사용법: [docs/GUIDE.ko.md](docs/GUIDE.ko.md). 모든 설정 설명: [installer/INSTALL-README.txt](installer/INSTALL-README.txt).
 
 ## 제거
 
