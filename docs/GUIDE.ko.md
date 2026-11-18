@@ -10,7 +10,7 @@
   - 확인한 캡처보드: Live Gamer 4K(GC573), GC313 Pro, GC553 Pro
   - 엘가토 등 다른 회사 캡처보드나 OBS에서는 동작하지 않아요.
 - Streaming Center에서 **콘솔 화면이 미리보기에 잘 나오는 상태**
-- **그래픽카드**: 최소 AMD Radeon RX 6600. 지포스는 FSR 3 기준 RTX 2060급, RIFE 기준 RTX 3070·4060급 이상(근사 측정)
+- **그래픽카드**: 최소 AMD Radeon RX 6600. NVIDIA Video Frame Generation·DLSS 프레임 생성은 RTX 40/50. 지포스는 FSR 3 기준 RTX 2060급, RIFE 기준 RTX 3070·4060급 이상(근사 측정)
 - **120Hz 이상 모니터**: 60Hz 모니터에서는 생성된 프레임이 보이지 않아요.
 - Windows x64
 
@@ -18,9 +18,9 @@
 
 ## 2. 설치 파일 받기
 
-1. [Releases](https://github.com/GamKim/consolesmooth/releases/latest) 페이지에서 `ConsoleSmooth-Plugin-Setup-1.0.1.exe`를 받아요.
+1. [Releases](https://github.com/GamKim/consolesmooth/releases/latest) 페이지에서 `ConsoleSmooth-Plugin-Setup-1.1.0.exe`를 받아요.
 2. 서명이 없는 설치 파일이라 실행하면 Windows가 "PC 보호" 경고를 띄울 수 있어요. **추가 정보 → 실행**을 누르세요.
-   - 걱정되면 같은 페이지의 `SHA256SUMS-1.0.1.txt` 값과 받은 파일의 해시를 비교해 보세요(PowerShell: `Get-FileHash 파일이름`).
+   - 걱정되면 같은 페이지의 `SHA256SUMS-1.1.0.txt` 값과 받은 파일의 해시를 비교해 보세요(PowerShell: `Get-FileHash 파일이름`).
 
 ## 3. 설치하기
 
@@ -72,7 +72,8 @@
 
 | 하고 싶은 것 | 설정 위치 |
 |---|---|
-| 화질이 더 좋게 / 더 가볍게 | 프레임 생성 탭 → 모델: **RIFE 4.6**(화질 우선) / **FSR 3**(가벼움) |
+| 화질이 더 좋게 / 더 가볍게 | 프레임 생성 탭 → 모델: **RIFE 4.15 lite**·**NVIDIA Video Frame Generation**(화질) / **FSR 3**·**AMD FSR 프레임 생성**(가벼움) |
+| 지연을 가장 짧게 | 표시·녹화 탭 → **저지연 보기** 켜기 + 전체 화면, 2배. 바꾼 뒤 Streaming Center를 다시 시작 (원본보다 약 9~19ms) |
 | 160Hz 같은 모니터에 맞추기 | 프레임 생성 탭 → 출력 방식: **목표 프레임**을 모니터 Hz로 |
 | 지연을 조금이라도 줄이기 | 프레임 생성 탭 → 표시 방식: **전체 화면**(창보다 짧아요) |
 | 30fps 게임(GTA5 화질 모드, 블러드본)을 고르게 | 고급 탭 → **30fps 보정**(지연 약 +8ms, 기본 끔) |

@@ -15,6 +15,13 @@ Copyright the GLib authors and contributors; individual notices are retained in
 their upstream source. https://gitlab.gnome.org/GNOME/glib/-/tree/2.62.6
 COPYING: https://raw.githubusercontent.com/GNOME/glib/2.62.6/COPYING
 
+Bundled manufacturer runtimes (1.1.0), shipped unmodified under their own licenses:
+- AMD FidelityFX SDK 2.4.0 frame generation DLLs (engine\engines\amdfg): AMD binary license, see LICENSE.md there.
+- NVIDIA DLSS Frame Generation runtime nvngx_dlssg.dll 310.9.16 (engine\engines\dlssg): NVIDIA RTX SDKs license,
+  see LICENSE-NVIDIA-RTX-SDK.txt there. This software uses NVIDIA DLSS. NVIDIA, the NVIDIA logo and DLSS are
+  trademarks of NVIDIA Corporation.
+- NVIDIA Video Frame Generation runtime: not bundled; downloaded from NVIDIA by the user on first use.
+
 These libraries are dynamically accessed from the user's existing installation.
 No GStreamer, GLib, Qt, AVerMedia SDK, Windows or manufacturer application binary
 is bundled in this installer. The linked libraries and their use are covered by

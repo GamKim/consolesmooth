@@ -346,8 +346,10 @@ static int catch_up_probe(void *pad,void *info,void *data){
  c->dropped++;catch_up_report(c,nowNs);return 0; /* GST_PAD_PROBE_DROP */
 }
 static void catch_up_free(void *data){HeapFree(GetProcessHeap(),0,data);}
+#include "gpu_probe.h" /* 2.3.3: GPU path in public and internal builds */
 static void *make_frame_filter(void){
  if(!load_engine())return NULL;
+ if(!synthetic){void *gb=gpu_out_bin();if(gb)return gb;}
  void *error=NULL;
  /* Live: BGRA straight through (no CPU colour conversion). Synthetic test stream: bgr24 engine input. */
  void *bin=parse_bin(synthetic

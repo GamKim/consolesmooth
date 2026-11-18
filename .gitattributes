@@ -1,0 +1,7 @@
+# Model files are SHA-256 pinned in engine/model_catalog.h: keep their exact bytes (no line-ending conversion).
+third_party/rife-ncnn-vulkan/models/** -text
+# Notice files of the engine slots are SHA-256 pinned too (model_catalog.h basename check).
+engine/nvvfg/NOTICE-NVIDIA-VFG.txt -text
+engine/amdfg/NOTICE-AMD-FG.txt -text
+engine/dlssg/NOTICE-NVIDIA-DLSSG.txt -text
+third_party/fidelityfx-sdk-1.1.4/LICENSE.txt -text

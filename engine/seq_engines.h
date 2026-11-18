@@ -17,6 +17,16 @@ struct SeqEngine{
 // The Vulkan device is matched by PCI vendor/device id to the GPU ncnn selected, because raw
 // Vulkan enumeration order can differ from ncnn numbering (e.g. iGPU listed first).
 SeqEngine* cs_create_fsr3(uint32_t vendorId,uint32_t deviceId,std::string& error);
+#ifdef CS_INTERNAL_VFG
+// 2.2.8 internal only: NVIDIA VFG (vfg_engine.cpp). Runtime = user download, never shipped.
+SeqEngine* cs_create_vfg(std::string& error);
+// 2.2.8 internal only: NVIDIA DLSS FG through engines\dlssg\cs_dlssg.dll (dlssg_engine.cpp). Runtime = NVIDIA app cache copy.
+#ifdef CS_INTERNAL_DLSSG
+SeqEngine* cs_create_dlssg(const std::wstring& modelDir,std::string& error);
+#endif
+// 2.2.8 internal only: AMD FidelityFX SDK 2.4 frame generation DLL through engines\amdfg\cs_amdfg.dll (amdfg_engine.cpp).
+SeqEngine* cs_create_amdfg(const std::wstring& modelDir,std::string& error);
+#endif
 // Parallel pixel conversions (4-byte BGRA/RGBA <-> bgr24).
 void cs_bgr_to_4(const uint8_t* bgr,uint8_t* dst,size_t pixels,bool swapRB);
 void cs_4_to_bgr(const uint8_t* src,uint8_t* bgr,size_t pixels,bool swapRB);

@@ -5,6 +5,10 @@ Native RIFE implementation: nihui/rife-ncnn-vulkan, MIT.
 RIFE model research/source: hzwer/ECCV2022-RIFE, MIT.
 Runtime model files: models/rife-v4.6/flownet.param and flownet.bin from the
 pinned nihui/rife-ncnn-vulkan repository. Unmodified; SHA256 is pinned in model_catalog.h.
+2.2.6 optional model RIFE 4.15 lite: rife415lite/flownet.param and flownet.bin from
+TNTwise/rife-ncnn-vulkan (fork of nihui/rife-ncnn-vulkan, MIT, Copyright (c) 2020 nihui),
+commit 13338e38debe2e400b3eeecf6792312d01a692f9, models/rife-v4.15-lite. Unmodified;
+SHA256 pinned in model_catalog.h. License text: licenses/rife_tntwise.txt.
 ncnn: Tencent, BSD-3-Clause plus bundled component notices in its full LICENSE.txt.
 glslang: Khronos and contributors; see its complete multi-component LICENSE.txt.
 Vulkan-Headers: Khronos; see LICENSE.md and LICENSES.
@@ -41,7 +45,8 @@ Not sponsored or endorsed by AMD.
 pixel as a specialization constant (BGRA frames without CPU conversion). Above 1920x1080 the
 RIFE 4.6 flow network runs on half-size images and a weight-free tail network resizes the flow
 and mask to full size and warps/blends the full-size images (the reference RIFE scale=0.5
-inference). The model files stay unmodified and SHA256-pinned; the network description is
+inference; 2.2.6: the final flow and mask are found by graph structure, so RIFE 4.15 lite
+uses the same path). The model files stay unmodified and SHA256-pinned; the network description is
 rewritten in memory after the pinned file is verified.
 
 Source changes to third-party code in this repository are listed as diffs against the pinned

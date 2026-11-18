@@ -24,6 +24,12 @@
     "use": "compiled dependency"
   },
   {
+    "name": "rife-ncnn-vulkan (TNTwise fork, models only)",
+    "origin": "https://github.com/TNTwise/rife-ncnn-vulkan.git",
+    "commit": "13338e38debe2e400b3eeecf6792312d01a692f9",
+    "use": "model files (models/rife-v4.15-lite, unmodified)"
+  },
+  {
     "name": "Vulkan-Headers",
     "origin": "https://github.com/KhronosGroup/Vulkan-Headers.git",
     "commit": "9fbc2a782ee3f8a4db64e7d991e23da75e893f44",

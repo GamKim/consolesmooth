@@ -17,6 +17,8 @@
 #include <dxgi1_5.h> /* 2.2.4: IDXGIFactory5 for tearing (variable refresh / sync off) */
 #define DIRECT_CLOSE_MESSAGE (WM_APP+1)
 static volatile LONG direct_mode;static int direct_forced;
+static volatile LONG direct_gpu_feed; /* 11-18 test (gpu_view.h): the GPU path presents into this window itself */
+static void (*direct_release_hook)(void);
 static volatile LONG direct_state;
 static SRWLOCK direct_lock=SRWLOCK_INIT,direct_frame_lock=SRWLOCK_INIT,direct_life=SRWLOCK_INIT;
 static uint8_t *direct_frame;static int direct_w,direct_h;static LONG64 direct_seq,direct_shown_seq;
@@ -86,6 +88,7 @@ static void direct_release(void){
  /* Releasing the device can take a moment; do not leave an empty window over the screen meanwhile. */
  if(direct_hwnd)ShowWindow(direct_hwnd,SW_HIDE);
  AcquireSRWLockExclusive(&direct_lock);
+ if(direct_release_hook)direct_release_hook();
  DIRECT_RELEASE(direct_sampler,ID3D11SamplerState_Release);DIRECT_RELEASE(direct_ps,ID3D11PixelShader_Release);DIRECT_RELEASE(direct_ps_sharp,ID3D11PixelShader_Release);DIRECT_RELEASE(direct_vs,ID3D11VertexShader_Release);
  DIRECT_RELEASE(direct_rtv,ID3D11RenderTargetView_Release);DIRECT_RELEASE(direct_srv,ID3D11ShaderResourceView_Release);DIRECT_RELEASE(direct_tex,ID3D11Texture2D_Release);
  DIRECT_RELEASE(direct_chain,IDXGISwapChain1_Release);DIRECT_RELEASE(direct_ctx,ID3D11DeviceContext_Release);DIRECT_RELEASE(direct_dev,ID3D11Device_Release);
@@ -192,6 +195,7 @@ static void direct_tap(void *buffer,int w,int h){
 /* Called by the large preview sink's probe when its frame is due. 1: shown here, the host sink skips it. */
 static int direct_show(void){
  if(!direct_mode||InterlockedCompareExchange(&direct_state,0,0)!=2)return 0;
+ if(InterlockedCompareExchange(&direct_gpu_feed,0,0))return 1; /* fed by the GPU path: the host sink skips this frame */
  AcquireSRWLockShared(&direct_lock);if(InterlockedCompareExchange(&direct_state,0,0)!=2){ReleaseSRWLockShared(&direct_lock);return 0;}
  LARGE_INTEGER a,b,c,f;QueryPerformanceFrequency(&f);QueryPerformanceCounter(&a);D3D11_MAPPED_SUBRESOURCE mapped;HRESULT hr;
  AcquireSRWLockShared(&direct_frame_lock);

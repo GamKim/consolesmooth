@@ -89,7 +89,7 @@ static bool trusted(const std::wstring& path,const char* expected){
 // Every file an engine loads from the plugin folder is pinned by SHA-256 in the catalog.
 static bool approved(const std::wstring& path,int i){
  const CsModelSpec& m=cs_models[i];
- if(m.family==3)return trusted(path+L"/"+m.basename,m.param_sha256);
+ if(m.family==3||m.family==4||m.family==5||m.family==6)return trusted(path+L"/"+m.basename,m.param_sha256);
  return trusted(path+L"/"+m.basename+L".param",m.param_sha256)&&trusted(path+L"/"+m.basename+L".bin",m.bin_sha256);
 }
 void* cs_create(const wchar_t* dir,int gpu){
@@ -108,6 +108,13 @@ void* cs_create(const wchar_t* dir,int gpu){
   std::unique_ptr<Engine> e(new Engine);e->gpu=gpu;e->model=model;e->path=path;try{e->info=describe_gpu(gpu);}catch(...){}
   int rc=-1;
   if(cs_models[model].family==3){{const ncnn::GpuInfo& info=ncnn::get_gpu_info(gpu);e->seq.reset(cs_create_fsr3(info.vendor_id(),info.device_id(),error));}rc=e->seq?0:-1;}
+#ifdef CS_INTERNAL_VFG
+  else if(cs_models[model].family==4){e->seq.reset(cs_create_vfg(error));rc=e->seq?0:-1;}
+#ifdef CS_INTERNAL_DLSSG
+  else if(cs_models[model].family==5){e->seq.reset(cs_create_dlssg(path,error));rc=e->seq?0:-1;}
+#endif
+  else if(cs_models[model].family==6){e->seq.reset(cs_create_amdfg(path,error));rc=e->seq?0:-1;}
+#endif
   else rc=load_rife(e.get(),1.f);
   {int o=gpu_options.load();char extra[96];snprintf(extra,sizeof extra," options=%d fp16_arith_used=%d",o,(cs_models[model].family!=3&&(o&2)&&ncnn::get_gpu_info(gpu).support_fp16_arithmetic())?1:0);e->info+=extra;}
   if(rc!=0){if(error.empty())error="Model load failed";e.reset();if(!users)ncnn::destroy_gpu_instance();return nullptr;}
@@ -174,3 +181,12 @@ void cs_destroy(void* p){
  if(!p)return;std::lock_guard<std::mutex> guard(lifecycle);delete static_cast<Engine*>(p);
  if(users&&!--users)ncnn::destroy_gpu_instance();
 }
+#ifdef CS_INTERNAL_VFG
+// 11-16 GPU-path prototype: the bench in gpu_interop.cpp drives this engine's RIFE directly.
+RIFE* cs_engine_rife(void* p){return p?static_cast<Engine*>(p)->rife.get():nullptr;}
+SeqEngine* cs_engine_seq(void* p){return p?static_cast<Engine*>(p)->seq.get():nullptr;} // 11-18 FSR 3 GPU path
+int cs_engine_family(void* p){return p?cs_models[static_cast<Engine*>(p)->model].family:-1;}
+// 11-16 GPU-path step 2c: load the RIFE flow scale for a frame size without a CPU interpolation call.
+int cs_engine_prepare(void* p,int w,int h){auto* e=static_cast<Engine*>(p);if(!e||!e->rife)return -1;
+ if(want_scale(w,h,e->floor)!=e->scale){try{std::lock_guard<std::mutex> guard(lifecycle);if(load_rife(e,want_scale(w,h,e->floor)))return -2;}catch(...){return -3;}}return 0;}
+#endif

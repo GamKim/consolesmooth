@@ -5,7 +5,7 @@
  * log lines. Nothing is sent anywhere. The user name is masked; the computer name is not collected.
  */
 #include <cpuid.h>
-#define CS_PLUGIN_VERSION "1.0.1"
+#define CS_PLUGIN_VERSION "1.1.0"
 static void diag_cpu(char out[49]){
  unsigned r[12]={0},eax,ebx,ecx,edx;out[0]=0;
  if(!__get_cpuid(0x80000000,&eax,&ebx,&ecx,&edx)||eax<0x80000004)return;

@@ -37,7 +37,7 @@ static int pace_pass_slow(PaceState *s,double period){
 static void tl_mark(int stage,void *buffer);
 /* 2.0.0 test only (CS_TEST_TIMELINE): stage 3 = large preview sink, after any pacing wait, right before the host presents. */
 static int on_pace_impl(void *pad,void *info,void *data);
-static int on_pace(void *pad,void *info,void *data){int r=on_pace_impl(pad,info,data);PaceState *s=data;{static volatile LONG named[3];if(s->direct<3&&!InterlockedExchange(&named[s->direct],1))logline("SINK_THREAD direct=%d tid=%lu",s->direct,GetCurrentThreadId());}if(r&&s->direct==1)tl_mark(3,probe_buffer(info));return r;}
+static int on_pace(void *pad,void *info,void *data){int r=on_pace_impl(pad,info,data);PaceState *s=data;{static volatile LONG named[3];if(s->direct<3&&!InterlockedExchange(&named[s->direct],1))logline("SINK_THREAD direct=%d tid=%lu",s->direct,GetCurrentThreadId());}if(s->direct==1)tl_mark(r?3:4,probe_buffer(info));return r;} /* 11-18 test: stage 4 = shown by the full screen window (after its Present) */
 static int on_pace_impl(void *pad,void *info,void *data){
  (void)info;PaceState *s=data;CsDwmTiming t={.cbSize=sizeof t};
  /* 2.2.0 beta low latency view: no refresh hold; the full screen window presents on arrival, the hidden sinks skip. */

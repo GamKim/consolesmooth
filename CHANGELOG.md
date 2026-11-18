@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.0 — low latency view, six models (2026-11-18)
+
+- Low latency view is a regular feature (no longer beta). With low latency view + full screen + Low latency + 2x, the host's GPU frames are shared with the model (no CPU copies), the made frame is shown as soon as it is ready and the original half a source interval later, straight into the full screen window (independent flip). 240 fps phone, Switch 2 Zelda, RTX 5080, delay after the passthrough: FSR 3 8.8 ms, RIFE 4.6 11.8, AMD FSR Frame Generation 12.5, NVIDIA Video Frame Generation 12.6, RIFE 4.15 lite 12.7, NVIDIA DLSS Frame Generation 19.0 (1.0.1: RIFE 4.6 83.0, FSR 3 76.7; Streaming Center preview without generation 31.9).
+- The fast path is chosen when Streaming Center starts; the settings window says when a restart changes it. Other settings (3x/4x, target fps, 30 fps smoothing, stable, two-GPU laptops) use the standard path. A fast-path failure is remembered per model and the next start uses the standard path; choosing the model again retries.
+- Uneven source hand-over by the host (8/25 ms gaps) no longer drops shown frames on the fast path.
+- Models: RIFE 4.6, RIFE 4.15 lite, FSR 3, AMD FSR Frame Generation (AMD FidelityFX SDK 2.4 DLLs, 2x), NVIDIA Video Frame Generation (RTX 40/50, runtime downloaded from NVIDIA on first use), NVIDIA DLSS Frame Generation (RTX 40/50, runtime nvngx_dlssg.dll 310.9.16 bundled in the installer under the NVIDIA RTX SDKs license).
+- Recommended settings: generation buffer = half an output tick + 3 x measured time + 4 ms, 15-25 ms (buffer sweep, RTX 5080: 99%+ generated needed AMD 17, DLSS 20, RIFE/FSR 3 25 ms).
+
 ## 1.0.1 — first public release (Streaming Center 1.9.19.1 and 1.8.22.2)
 
 1.0.1 is the first version published. 1.0.0 was built and tested but never released; its contents are listed below and are all part of 1.0.1.

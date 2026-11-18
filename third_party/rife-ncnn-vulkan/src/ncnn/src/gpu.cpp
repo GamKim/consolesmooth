@@ -1950,7 +1950,19 @@ VulkanDevice::VulkanDevice(int device_index)
 #endif // __ANDROID_API__ >= 26
     if (info.support_VK_NV_cooperative_matrix())
         enabledExtensions.push_back("VK_NV_cooperative_matrix");
-
+#if _WIN32
+    // ConsoleSmooth 11-18 internal GPU path (from the 11-16 prototype): D3D11 shared textures imported as Vulkan images.
+    {
+        static const char* cs_win32[] = {"VK_KHR_external_memory_win32", "VK_KHR_external_semaphore", "VK_KHR_external_semaphore_win32"};
+        uint32_t n = 0;
+        vkEnumerateDeviceExtensionProperties(info.physical_device(), NULL, &n, NULL);
+        std::vector<VkExtensionProperties> props(n);
+        vkEnumerateDeviceExtensionProperties(info.physical_device(), NULL, &n, props.data());
+        for (int k = 0; k < 3; k++)
+            for (uint32_t j = 0; j < n; j++)
+                if (strcmp(props[j].extensionName, cs_win32[k]) == 0) { enabledExtensions.push_back(cs_win32[k]); break; }
+    }
+#endif
     void* enabledExtensionFeatures = 0;
 
     // enable int8 storage

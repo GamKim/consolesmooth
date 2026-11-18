@@ -10,6 +10,7 @@
 #include "../engine/rate_math.h"
 #include "../engine/frame_limits.h"
 #include "../engine/model_catalog.h"
+#include "gpu_rule.h" /* 2.3.3 */
 static volatile LONG control_bits;
 static volatile LONG toggle_serial;
 static volatile LONG64 toggle_qpc;
@@ -40,7 +41,7 @@ static int ui_sync;static volatile LONG direct_sync;static int direct_tearing_su
 static int ui_hot_mods=MOD_CONTROL|MOD_ALT,ui_hot_vk='F',ui_hot_capture,ui_hot_ok=-1;
 /* 2.2.0 beta (11-13 user): "저지연 보기". Our full screen window shows the picture as it arrives, also with generation off,
  * without the preview refresh hold or output spacing; the record/stream route gets no frames (recording and streaming off). */
-static int ui_lowview;static volatile LONG low_view;
+static int ui_lowview;static volatile LONG low_view;static LONG test_lowview; /* 11-18 test only: CS_TEST_LOWVIEW=1 keeps the low latency view on (filming/timeline runs) */
 static int ui_record,ui_saved_record,ui_buffer,ui_saved_buffer,ui_model,ui_saved_model;
 static int ui_low_buffer=15,ui_saved_low_buffer=15,ui_low_eligible=1;
 /* Display: 0 the host's window (composed, stays usable), 1 our direct full-screen window (direct_present.h). */
@@ -94,6 +95,39 @@ static wchar_t ui_font_path[32768];
 #define UI_RED RGB(230,0,45)
 static LONG ui_requested(void){return InterlockedCompareExchange(&control_bits,0,0);}
 static int ui_output(void){return ui_mode?ui_target:ui_src*ui_mult;}
+#include <shellapi.h> /* 2.3.3: NVIDIA VFG download offer in every build */
+/* 2.2.8 INTERNAL: NVIDIA VFG runtime = %LOCALAPPDATA%\ConsoleSmooth\nvidia-vfg (one-click download) or a pip install. */
+static int ui_vfg_runtime_ok(void){wchar_t p[MAX_PATH];DWORD n=GetEnvironmentVariableW(L"CS_VFG_DIR",p,MAX_PATH);
+ if(n&&n<MAX_PATH-40){wcscat(p,L"\\NVVideoEffects.dll");if(GetFileAttributesW(p)!=INVALID_FILE_ATTRIBUTES)return 1;}
+ n=GetEnvironmentVariableW(L"LOCALAPPDATA",p,MAX_PATH);if(n&&n<MAX_PATH-60){wcscat(p,L"\\ConsoleSmooth\\nvidia-vfg\\NVVideoEffects.dll");if(GetFileAttributesW(p)!=INVALID_FILE_ATTRIBUTES)return 1;}
+ n=GetEnvironmentVariableW(L"APPDATA",p,MAX_PATH);if(n&&n<MAX_PATH-80){wchar_t q[MAX_PATH];WIN32_FIND_DATAW fd;swprintf(q,MAX_PATH,L"%ls\\Python\\Python3*",p);HANDLE h=FindFirstFileW(q,&fd);int ok=0;
+  if(h!=INVALID_HANDLE_VALUE){do{swprintf(q,MAX_PATH,L"%ls\\Python\\%ls\\site-packages\\nvvfx\\libs\\NVVideoEffects.dll",p,fd.cFileName);if(GetFileAttributesW(q)!=INVALID_FILE_ATTRIBUTES)ok=1;}while(!ok&&FindNextFileW(h,&fd));FindClose(h);}
+  if(ok)return 1;}
+ return 0;}
+static void ui_vfg_offer_download(HWND owner){
+ if(ui_vfg_runtime_ok())return;
+ int r=MessageBoxW(owner,ui_tr(L"NVIDIA VFG 런타임이 이 PC에 없어요.\r\n\r\nNVIDIA 공식 서버(pypi.nvidia.com)에서 nvidia-vfx 0.2.0.0을 받아 필요한 파일 5개(약 210 MB)만 설치할까요?\r\n받는 양은 약 416 MB이고, NVIDIA 서명을 확인한 뒤 %LOCALAPPDATA%\\ConsoleSmooth\\nvidia-vfg 에 넣어요.\r\n\r\nNVIDIA 라이선스가 적용돼요. '아니요'를 누르면 라이선스 페이지만 열어요.\r\n(내부 시험판 전용 기능)",
+  L"The NVIDIA VFG runtime is not on this PC.\r\n\r\nDownload nvidia-vfx 0.2.0.0 from NVIDIA (pypi.nvidia.com) and install only the 5 runtime files (~210 MB)?\r\nThe download is ~416 MB; files are checked for NVIDIA signatures and go to %LOCALAPPDATA%\\ConsoleSmooth\\nvidia-vfg.\r\n\r\nNVIDIA license terms apply. 'No' opens the license page only.\r\n(internal test build only)"),
+  L"ConsoleSmooth · NVIDIA VFG",MB_YESNOCANCEL|MB_ICONINFORMATION);
+ if(r==IDNO){ShellExecuteW(owner,L"open",L"https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-software-license-agreement/",NULL,NULL,SW_SHOWNORMAL);return;}
+ if(r!=IDYES)return;
+ wchar_t args[33000];swprintf(args,33000,L"-NoProfile -ExecutionPolicy Bypass -File \"%ls\\engines\\nvvfg\\Get-NvidiaVfg.ps1\"",engine_dir);
+ HINSTANCE h=ShellExecuteW(owner,L"open",L"powershell.exe",args,NULL,SW_SHOWNORMAL);
+ logline("UI_VFG_DOWNLOAD started=%d",(INT_PTR)h>32);}
+/* 2.2.8 INTERNAL: DLSS FG runtime = copy of the NVIDIA app's own DLSS cache file (nothing downloaded or shipped). */
+#ifdef CS_INTERNAL_DLSSG /* 2.3.4: every build */
+static void ui_dlssg_offer(HWND owner){
+ {wchar_t b[32768];swprintf(b,32768,L"%ls\\engines\\dlssg\\nvngx_dlssg.dll",engine_dir);if(GetFileAttributesW(b)!=INVALID_FILE_ATTRIBUTES)return;} /* 2.3.4: bundled */
+ wchar_t p[MAX_PATH];DWORD n=GetEnvironmentVariableW(L"CS_DLSSG_DIR",p,MAX_PATH);
+ if(n&&n<MAX_PATH-40){wcscat(p,L"\\nvngx_dlssg.dll");if(GetFileAttributesW(p)!=INVALID_FILE_ATTRIBUTES)return;}
+ n=GetEnvironmentVariableW(L"LOCALAPPDATA",p,MAX_PATH);if(n&&n<MAX_PATH-60){wcscat(p,L"\\ConsoleSmooth\\nvidia-dlssg\\nvngx_dlssg.dll");if(GetFileAttributesW(p)!=INVALID_FILE_ATTRIBUTES)return;}
+ int r=MessageBoxW(owner,ui_tr(L"DLSS 프레임 생성 파일(nvngx_dlssg.dll)이 준비되지 않았어요.\r\n\r\n이 PC의 NVIDIA 앱이 받아 둔 DLSS 파일(C:\\ProgramData\\NVIDIA\\NGX)에서 가장 새 버전을 찾아, NVIDIA 서명을 확인한 뒤 %LOCALAPPDATA%\\ConsoleSmooth\\nvidia-dlssg 에 복사할까요?\r\n인터넷에서 받지 않아요. RTX 40/50에서만 동작해요.\r\n(내부 시험판 전용 기능)",
+  L"The DLSS Frame Generation file (nvngx_dlssg.dll) is not set up.\r\n\r\nCopy the newest DLSS file the NVIDIA app keeps on this PC (C:\\ProgramData\\NVIDIA\\NGX), after an NVIDIA signature check, to %LOCALAPPDATA%\\ConsoleSmooth\\nvidia-dlssg?\r\nNothing is downloaded. RTX 40/50 only.\r\n(internal test build only)"),L"ConsoleSmooth · DLSS FG",MB_YESNO|MB_ICONINFORMATION);
+ if(r!=IDYES)return;
+ wchar_t args[33000];swprintf(args,33000,L"-NoProfile -ExecutionPolicy Bypass -File \"%ls\\engines\\dlssg\\Get-NvidiaDlssg.ps1\"",engine_dir);
+ HINSTANCE h=ShellExecuteW(owner,L"open",L"powershell.exe",args,NULL,SW_SHOWNORMAL);
+ logline("UI_DLSSG_COPY started=%d",(INT_PTR)h>32);}
+#endif
 static int ui_model_choices(void){int n=0;for(int i=0;i<CS_MODEL_COUNT;i++)n+=cs_model_valid(i);return n;}
 /* 1.9.5: default of "GPU clock keep" when nothing is saved yet: on when the primary display adapter is AMD. Office RX 6600,
  * Mario Kart 60->120 FSR 3, 15 ms: keep off 89% generated (360 repeats/min), keep on 99.3% (6). NVIDIA stays off (5080: +7% GPU time). */
@@ -124,7 +158,7 @@ static int ui_preferences(int save){
   ui_sharpen=GetPrivateProfileIntW(L"preview",L"sharpen",0,path)==1;InterlockedExchange(&direct_sharpen,ui_sharpen);
   ui_hot_mods=GetPrivateProfileIntW(L"preview",L"hotkey_mods",MOD_CONTROL|MOD_ALT,path)&(MOD_CONTROL|MOD_ALT|MOD_SHIFT);ui_hot_vk=GetPrivateProfileIntW(L"preview",L"hotkey_vk",'F',path);if(ui_hot_vk<0||ui_hot_vk>255)ui_hot_vk='F';if(ui_hot_vk&&!(ui_hot_mods&(MOD_CONTROL|MOD_ALT)))ui_hot_mods|=MOD_CONTROL|MOD_ALT;
   ui_sync=GetPrivateProfileIntW(L"preview",L"sync_mode",0,path);if(ui_sync<0||ui_sync>2)ui_sync=0;InterlockedExchange(&direct_sync,ui_sync);
-  ui_lowview=GetPrivateProfileIntW(L"preview",L"low_latency_view",0,path)==1;InterlockedExchange(&low_view,0); /* 2.2.4: active only after the on button */
+  ui_lowview=GetPrivateProfileIntW(L"preview",L"low_latency_view",0,path)==1;InterlockedExchange(&low_view,test_lowview); /* 2.2.4: active only after the on button */
   {int c=GetPrivateProfileIntW(L"preview",L"fps_corner",1,path);InterlockedExchange(&ui_fps_corner,c>=0&&c<=3?c:1);}
   ui_cadence=GetPrivateProfileIntW(L"preview",L"cadence30",0,path)!=0;ui_hudkeep=GetPrivateProfileIntW(L"preview",L"hud_keep",1,path)!=0; /* 1.9.6: default on (user 11-10) */
   ui_gpukeep=GetPrivateProfileIntW(L"preview",L"gpu_keep",ui_primary_is_amd()?1:0,path)==1;ui_fsrfast=GetPrivateProfileIntW(L"preview",L"fsr_fast",0,path)!=0;ui_latency=GetPrivateProfileIntW(L"preview",L"latency_priority",0,path)==1;InterlockedExchange(&engine_options,UI_ENGINE_BITS());
@@ -546,7 +580,7 @@ static void ui_refresh(void){
  // FSR 3: 2x and 4x (2.2.2: midpoint twice). Lock the unsupported choices.
  int family=cs_models[ui_model].family,engineOk=cs_model_rate_supported(ui_model,detected.live?detected.sn:ui_src,detected.live?detected.sd:1,detected.live?tn:ui_output(),detected.live?td:1);
  if(!engineOk)valid=0;
- EnableWindow(ui_items[133],family!=3);EnableWindow(ui_items[135],family!=3);EnableWindow(ui_items[136],1); /* 2.2.2: FSR 3 4x */
+ EnableWindow(ui_items[133],family!=3&&family!=5&&family!=6);EnableWindow(ui_items[135],family!=3&&family!=6);EnableWindow(ui_items[136],family!=6); /* 2.2.2: FSR 3 4x; 2.2.8 internal DLSS FG 2x only */
  // Processing size follows the Streaming Center recording resolution (Settings > Recording), not the capture.
  int scaled=actualW&&actualH&&(actualW!=detected.width||actualH!=detected.height);
  int pixels=scaled?actualW*actualH:detected.width*detected.height;
@@ -602,6 +636,12 @@ static void ui_refresh(void){
   else if(shown==-1&&ui_saved_display)wcscpy(displayText,ui_tr(L"전체 화면 표시 실패 · 창으로 표시 중 · 적용을 누르면 다시 시도합니다.",L"Full screen failed · showing a window · press Apply to retry."));
   else if(detected.live&&!fits)swprintf(displayText,160,ui_tr(L"주 모니터 %dHz는 목표의 배수가 아님 · 조금 고르지 않을 수 있음 · Esc로 복귀",L"Main monitor %dHz is not a multiple of the target · may be slightly uneven · Esc to return"),hz);
   else wcscpy(displayText,ui_tr(L"창보다 지연이 짧음 · 주 모니터 전체 · Esc로 복귀 · 다른 모니터 클릭 가능",L"Less latency than a window · main monitor · Esc to return · other monitors stay usable"));
+  /* 2.3.3: the faster GPU path is chosen when Streaming Center builds its preview; say when a restart changes it. */
+  {LONG act=InterlockedCompareExchange(&gpu_path_active,0,0);
+   if(InterlockedCompareExchange(&gpu_path_failed_now,0,0))wcscpy(displayText,ui_tr(L"빠른 저지연 방식을 이 PC에서 쓸 수 없어 다음 시작부터 기존 방식을 씁니다 · Streaming Center를 다시 시작하세요",L"The faster low latency path failed on this PC · the next start uses the standard path · restart Streaming Center"));
+   else if(act>=0){int want=gpu_rule(ui_saved_model,ui_lowview,ui_saved_display,ui_stable,ui_mode,ui_mult,ui_target,ui_src,ui_cadence,gpu_rule_failed_mask());
+    if(want&&cs_models[ui_saved_model].family!=4&&!gpu_rule_single_gpu())want=0;
+    if(want!=act)wcscpy(displayText,want?ui_tr(L"Streaming Center를 다시 시작하면 더 빠른 저지연 방식이 적용됩니다",L"Restart Streaming Center to use the faster low latency path"):ui_tr(L"Streaming Center를 다시 시작해야 바뀐 설정이 모두 적용됩니다",L"Restart Streaming Center to apply all changed settings"));}}
   ui_text(ui_items[156],displayText);}
  ui_text(ui_items[151],ui_record?ui_tr(L"생성 기능이 켜져 있을 때 포함 · 다음 녹화부터",L"With generated frames while on · from the next recording"):ui_tr(L"원본 · 다음 녹화부터",L"Original · from the next recording"));
  EnableWindow(ui_items[143],valid&&!(recording&&rateDirty));
@@ -684,7 +724,7 @@ static void ui_toggle_generation(const char *how){
  LARGE_INTEGER now;QueryPerformanceCounter(&now);int on=!(ui_requested()&1);
  if(on){if(ui_apply_pending)ui_publish_saved();ui_act_display=ui_saved_display;ui_act_lowview=ui_lowview;InterlockedExchange(&low_view,ui_act_lowview);ui_direct_reopen=1;}
  InterlockedExchange64(&toggle_qpc,now.QuadPart);InterlockedXor(&control_bits,1);LONG serial=InterlockedIncrement(&toggle_serial);
- if(!on){ui_act_lowview=0;InterlockedExchange(&low_view,0);}
+ if(!on){ui_act_lowview=0;InterlockedExchange(&low_view,test_lowview);}
  logline("UI_TOGGLE enabled=%d serial=%ld qpc=%lld by=%s display=%d low_view=%d",!!(ui_requested()&1),serial,(long long)now.QuadPart,how,ui_act_display,ui_act_lowview);
 }
 static LRESULT CALLBACK ui_proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
@@ -726,11 +766,18 @@ static LRESULT CALLBACK ui_proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
    case 132:case 133:ui_mode=id==133;break;
    case 128:{
     if(ui_model_choices()<2)break; /* Nothing to choose with a single engine. */
-    HMENU menu=CreatePopupMenu();for(int i=0;i<CS_MODEL_COUNT;i++)if(cs_model_valid(i))AppendMenuW(menu,MF_OWNERDRAW|(i==ui_model?MF_CHECKED:0),200+i,cs_models[i].label);
+    HMENU menu=CreatePopupMenu();for(int k=0;k<CS_MODEL_ORDER_COUNT;k++){int i=cs_model_order[k];if(cs_model_valid(i))AppendMenuW(menu,MF_OWNERDRAW|(i==ui_model?MF_CHECKED:0),200+i,cs_models[i].label);}
     RECT r;GetWindowRect(ui_items[128],&r);int choice=TrackPopupMenu(menu,TPM_RETURNCMD|TPM_NONOTIFY,r.left,r.bottom,0,window,NULL);DestroyMenu(menu);
     if(choice>=200&&choice<200+CS_MODEL_COUNT&&cs_model_valid(choice-200)){ui_model=choice-200;
+     {wchar_t gp[32768],gv[16];unsigned fm=gpu_rule_failed_mask();if(ui_model<32&&(fm>>ui_model&1)&&gpu_rule_settings_path(gp)){swprintf(gv,16,L"%u",fm&~(1u<<ui_model));WritePrivateProfileStringW(L"preview",L"gpu_path_failed",gv,gp);}} /* 2.3.3: choosing it again retries the GPU path */
      // Move to the nearest supported rate: FSR 3 needs 2x.
-     if(cs_models[ui_model].family==3){ui_mode=0;if(ui_mult!=4)ui_mult=2;}} /* 2.2.2: FSR 3 keeps 4x */
+     if(cs_models[ui_model].family==3){ui_mode=0;if(ui_mult!=4)ui_mult=2;} /* 2.2.2: FSR 3 keeps 4x */
+     if(cs_models[ui_model].family==4)ui_vfg_offer_download(window);
+#ifdef CS_INTERNAL_DLSSG
+     if(cs_models[ui_model].family==5){ui_mode=0;ui_dlssg_offer(window);} /* 2x/3x/4x */
+#endif
+     if(cs_models[ui_model].family==6){ui_mode=0;ui_mult=2;} /* AMD FSR FG DLL: 2x */
+    }
     break;}
    case 134:case 135:case 136:ui_mult=id-132;break;
    case 139:case 142:{int next=ui_target+(id==139?-1:1);AutoRate a=auto_snapshot();int min=a.live?a.sn/a.sd+1:30,max=a.live?4*a.sn/a.sd:240;if(next<min)next=min;if(next>max)next=max;wchar_t text[20];swprintf(text,20,L"%d",next);SetWindowTextW(ui_items[138],text);break;}
@@ -805,7 +852,7 @@ static DWORD WINAPI ui_main(void *unused){
  ui_child(ui_popup,L"STATIC",ui_tr(L"켜기/끄기 단축키",L"On/off shortcut"),0,195);ui_child(ui_popup,L"BUTTON",L"",button,196);ui_child(ui_popup,L"STATIC",L"",0,197);
  ui_child(ui_popup,L"STATIC",ui_tr(L"화면 동기화 (창·전체 화면)",L"Display sync (window and full screen)"),0,190);ui_child(ui_popup,L"BUTTON",ui_tr(L"수직 동기화",L"V-Sync"),button,191);ui_child(ui_popup,L"BUTTON",ui_tr(L"가변 주사율",L"Variable refresh"),button,192);ui_child(ui_popup,L"BUTTON",ui_tr(L"끔",L"Off"),button,193);
  ui_child(ui_popup,L"STATIC",ui_tr(L"가변 주사율: G-Sync·FreeSync 모니터에서 고르게 (창은 NVIDIA 창 모드 G-Sync)\r\n끔: 바로 표시해 지연이 가장 짧음 · 전체 화면은 찢어질 수 있음",L"Variable refresh: even on G-Sync/FreeSync monitors (window: NVIDIA windowed G-Sync)\r\nOff: shown at once, lowest delay · full screen may tear"),0,194);
- ui_child(ui_popup,L"STATIC",ui_tr(L"저지연 보기 (베타)",L"Low latency view (beta)"),0,185);ui_child(ui_popup,L"BUTTON",ui_tr(L"저지연 보기",L"Low latency view"),button,186);ui_child(ui_popup,L"STATIC",ui_tr(L"켜기 버튼·단축키를 누르면 전체 화면으로 들어온 화면을 바로 보여 줘요.\r\n보는 동안 녹화·방송에는 화면이 들어가지 않아요.",L"With the on button or shortcut, shows the picture in full screen as soon as it arrives.\r\nWhile shown, recording and streaming get no picture."),0,187);
+ ui_child(ui_popup,L"STATIC",ui_tr(L"저지연 보기",L"Low latency view"),0,185);ui_child(ui_popup,L"BUTTON",ui_tr(L"저지연 보기",L"Low latency view"),button,186);ui_child(ui_popup,L"STATIC",ui_tr(L"켜기 버튼·단축키를 누르면 전체 화면으로 들어온 화면을 바로 보여 줘요.\r\n보는 동안 녹화·방송에는 화면이 들어가지 않아요.",L"With the on button or shortcut, shows the picture in full screen as soon as it arrives.\r\nWhile shown, recording and streaming get no picture."),0,187);
  WNDCLASSW slider={0};slider.lpfnWndProc=ui_slider_proc;slider.hInstance=module;slider.lpszClassName=L"ConsoleSmooth.Slider";slider.hCursor=LoadCursorW(NULL,(LPCWSTR)IDC_ARROW);RegisterClassW(&slider);
  ui_child(ui_popup,slider.lpszClassName,ui_tr(L"생성 버퍼",L"Generation buffer"),WS_TABSTOP,158);ui_child(ui_popup,ui_label_class(159),L"",0,159);
  ui_child(ui_popup,L"STATIC",ui_tr(L"녹화 소스",L"Recording source"),0,148);ui_child(ui_popup,L"BUTTON",ui_tr(L"원본",L"Original"),button,149);ui_child(ui_popup,L"BUTTON",ui_tr(L"생성 프레임 포함",L"With generated"),button,150);ui_child(ui_popup,ui_label_class(151),L"",0,151);

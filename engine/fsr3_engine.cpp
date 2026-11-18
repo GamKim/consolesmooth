@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // AMD FidelityFX SDK 1.1.4 (MIT) FSR 3 frame interpolation on captured video. Video has no depth
-// or game motion vectors, so depth is a constant far plane, motion vectors are zero, and motion
-// comes only from FidelityFX optical flow. FSR 3 produces the midpoint only (2x).
+// or game motion vectors, so depth is a constant far plane and motion comes from FidelityFX optical flow.
+// 2.2.7: that optical flow (8x8 blocks) is also fed as the game motion vectors; before, they were zero. FSR 3 produces the
+// midpoint only (2x).
 // Runs on its own Vulkan device, separate from the ncnn instance used by RIFE.
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -11,6 +12,7 @@
 #include <FidelityFX/host/backends/vk/ffx_vk.h>
 #include "seq_engines.h"
 #include <vector>
+#include <algorithm>
 #include <memory>
 #include <chrono>
 #include <cmath>
@@ -61,6 +63,18 @@ FfxOpticalflowContext of{};FfxFrameInterpolationContext fi{};FfxOpticalflowShare
  // 3x has no midpoint form and stays refused. CS_TEST_FSR_NO_QUARTER=1 keeps 2x only.
  uint32_t vid=0,did=0;std::unique_ptr<SeqEngine> quarter;std::vector<uint8_t> mid;uint64_t midA=0,midB=0;bool quarterOff=false;
  bool noGame=false,ofHalf=false,renderHalf=false;Image colorHalf; // renderHalf (CS_TEST_FSR_RENDER_HALF=1): depth/game-vector passes at half size
+ // 2.2.7 (11-17 test, same 30->60 video, 698 pairs): zero motion vectors scored 36.21 dB (moving areas 25.72); the optical flow
+ // fed as motion vectors 38.03 (27.83), close to Veyra's DLSS FG 38.41 / FSR 3.1 38.28. A dense CPU flow reached 39.12, so the
+ // gain is the motion itself, not its resolution (flow cut to 8x8 blocks: 39.01). The flow runs first, its block vectors
+ // (ow x oh, integer pixels) are read back, converted to half floats and uploaded, and the game-vector passes run at that
+ // block size (renderSize = ow x oh), so nothing is expanded per pixel. Vectors point from the current frame to the previous
+ // one (prev = cur + mv); the opposite sign scored 35.0. CS_TEST_FSR_ZERO_MV=1 restores the zero vectors (A/B).
+ bool flowMv=true;Buffer ofDown,mvUp;uint32_t ow=0,oh=0,ru=0,rh=0;int mvUpK=1;bool mvMed=false;std::vector<float> mvTmp;
+ // 2.2.8: block vectors are expanded 4x bilinearly by default (CS_TEST_FSR_MV_UP=1 restores 2.2.7 blocks); 11-17: 37.91 -> 38.05 dB,
+ // visible 8x8 block edges on fast arms/shields gone, +2.8 ms on RTX 5080. Original note: CS_TEST_FSR_MV_UP=2|4 expands the 8x8 block vectors bilinearly (ru x rh = ow*k x oh*k) so block edges do not
+ // show as steps; CS_TEST_FSR_MV_MED=1 first applies a 3x3 median on the block grid.
+ static uint16_t toHalf(float f){uint32_t x;memcpy(&x,&f,4);const uint32_t sg=(x>>16)&0x8000u;const int e=(int)((x>>23)&0xff)-112;const uint32_t m=x&0x7fffffu;
+  if(e<=0)return (uint16_t)sg;if(e>=31)return (uint16_t)(sg|0x7c00u);return (uint16_t)(sg|((uint32_t)e<<10)|(m>>13));}
  static bool flag(const wchar_t* n){wchar_t v[4];return GetEnvironmentVariableW(n,v,4)==1&&v[0]==L'1';}
  // Test only (CS_TEST_FSR_PROFILE=<file>): GPU timestamps per fed frame, appended as
  // up,prepare,optical_flow,interpolation,readback (ms). 11-08 AMD iGPU optimization study.
@@ -76,6 +90,11 @@ FfxOpticalflowContext of{};FfxFrameInterpolationContext fi{};FfxOpticalflowShare
    for(uint32_t i=0;i<n;i+=2)fprintf(profile,"pass,%u,%u,%u,%u,%.3f\n",i/2,csPassId[i/2],csPassX[i/2],csPassY[i/2],(q[i+1]-q[i])*tsPeriod/1e6);}
   auto d=[&](int a,int b){return (t[b]-t[a])*tsPeriod/1e6;};fprintf(profile,"%d,%.3f,%.3f,%.3f,%.3f,%.3f\n",output?1:0,d(0,1),d(1,2),d(2,3),d(3,4),d(4,5));fflush(profile);}
 
+ // 11-18 internal GPU path (CS_INTERNAL_VFG): host D3D11 textures imported as Vulkan images (GENERAL layout).
+ struct GSlot{VkImage img=VK_NULL_HANDLE;VkDeviceMemory mem=VK_NULL_HANDLE;};GSlot gslot[8];int gslots=0;VkImage gIn=VK_NULL_HANDLE,gOut=VK_NULL_HANDLE;
+ void gblit(VkImage from,VkImageLayout fl,VkImage to,VkImageLayout tl){VkImageBlit b{};b.srcSubresource=b.dstSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};
+  b.srcOffsets[1]=b.dstOffsets[1]={w,h,1};vkCmdBlitImage(cb,from,fl,to,tl,1,&b,VK_FILTER_NEAREST);}
+ void gfree(){for(int i=0;i<gslots;i++){if(gslot[i].img)vkDestroyImage(dev,gslot[i].img,nullptr);if(gslot[i].mem)vkFreeMemory(dev,gslot[i].mem,nullptr);gslot[i]=GSlot{};}gslots=0;}
  bool blitFormat(VkFormat f){VkFormatProperties p;vkGetPhysicalDeviceFormatProperties(phys,f,&p);
   const VkFormatFeatureFlags need=VK_FORMAT_FEATURE_BLIT_SRC_BIT|VK_FORMAT_FEATURE_BLIT_DST_BIT|VK_FORMAT_FEATURE_TRANSFER_SRC_BIT|VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
   return (p.optimalTilingFeatures&need)==need;}
@@ -91,7 +110,7 @@ FfxOpticalflowContext of{};FfxFrameInterpolationContext fi{};FfxOpticalflowShare
  // FSR 3 leaves its own alpha in the output; the old CPU swap wrote 255, so the readback copy sets it (11-08: every pixel differed).
  void copyOpaque(uint8_t* d,const uint8_t* s,size_t n){copier.run(n/4,1024,[=](size_t a,size_t b){const uint32_t* x=(const uint32_t*)s;uint32_t* y=(uint32_t*)d;for(size_t i=a;i<b;i++)y[i]=x[i]|0xFF000000u;});}
 
- ~Fsr3(){if(dev){vkDeviceWaitIdle(dev);release();if(backend)shared.fpDestroyBackendContext(&shared,sharedId);if(fence)vkDestroyFence(dev,fence,nullptr);if(pool)vkDestroyCommandPool(dev,pool,nullptr);vkDestroyDevice(dev,nullptr);}if(inst)vkDestroyInstance(inst,nullptr);}
+ ~Fsr3(){if(dev){vkDeviceWaitIdle(dev);gfree();release();if(backend)shared.fpDestroyBackendContext(&shared,sharedId);if(fence)vkDestroyFence(dev,fence,nullptr);if(pool)vkDestroyCommandPool(dev,pool,nullptr);vkDestroyDevice(dev,nullptr);}if(inst)vkDestroyInstance(inst,nullptr);}
  uint32_t memType(uint32_t bits,VkMemoryPropertyFlags want){for(uint32_t i=0;i<memProps.memoryTypeCount;i++)if((bits&(1u<<i))&&(memProps.memoryTypes[i].propertyFlags&want)==want)return i;return UINT32_MAX;}
  bool makeImage(Image& im,VkFormat fmt,const wchar_t* name,FfxResourceUsage usage,int iw=0,int ih=0){
   im.info={VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};im.info.imageType=VK_IMAGE_TYPE_2D;im.info.format=fmt;im.info.extent={(uint32_t)(iw?iw:w),(uint32_t)(ih?ih:h),1};im.info.mipLevels=1;im.info.arrayLayers=1;im.info.samples=VK_SAMPLE_COUNT_1_BIT;
@@ -112,7 +131,7 @@ FfxOpticalflowContext of{};FfxFrameInterpolationContext fi{};FfxOpticalflowShare
  void release(){
   if(qp){vkDestroyQueryPool(dev,qp,nullptr);qp=VK_NULL_HANDLE;}if(csPassPool){vkDestroyQueryPool(dev,csPassPool,nullptr);csPassPool=VK_NULL_HANDLE;}
   if(contexts){ffxFrameInterpolationContextDestroy(&fi);ffxOpticalflowContextDestroy(&of);for(auto r:{ofVec,ofScd,dilD,dilMV,recD})shared.fpDestroyResource(&shared,r,sharedId);contexts=false;}
-  for(Image* im:{&color,&out,&depth,&mv,&inBgra,&outBgra,&colorHalf})freeImage(*im);gpuSwap=false;freeBuffer(up);freeBuffer(down);w=h=0;last=0;}
+  for(Image* im:{&color,&out,&depth,&mv,&inBgra,&outBgra,&colorHalf})freeImage(*im);gpuSwap=false;freeBuffer(up);freeBuffer(down);freeBuffer(ofDown);freeBuffer(mvUp);ow=oh=0;w=h=0;last=0;}
  bool submit(){if(vkEndCommandBuffer(cb))return false;VkSubmitInfo si{VK_STRUCTURE_TYPE_SUBMIT_INFO};si.commandBufferCount=1;si.pCommandBuffers=&cb;
   return !vkQueueSubmit(queue,1,&si,fence)&&!vkWaitForFences(dev,1,&fence,VK_TRUE,UINT64_MAX)&&!vkResetFences(dev,1,&fence);}
  bool begin(){VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};bi.flags=VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;return !vkBeginCommandBuffer(cb,&bi);}
@@ -120,7 +139,8 @@ FfxOpticalflowContext of{};FfxFrameInterpolationContext fi{};FfxOpticalflowShare
   // 1.8.1 "FSR 3 가속" (settings, default on): renderHalf + noGame (no Prepare after a reset). Video has constant far depth
   // and zero game vectors, so these passes give the same output at half size and need no repeat (same hash, 11-08).
   // The CS_TEST_FSR_* variables still force each part on for A/B tests; OF_HALF stays test only (output changes).
-  {bool fast=(cs_gpu_options_value()&4)!=0;release();w=fw;h=fh;noGame=fast||flag(L"CS_TEST_FSR_NO_PREPARE");ofHalf=flag(L"CS_TEST_FSR_OF_HALF");renderHalf=fast||flag(L"CS_TEST_FSR_RENDER_HALF");blendFallback=!flag(L"CS_TEST_FSR_NO_BLEND_FALLBACK");}
+  {bool fast=(cs_gpu_options_value()&4)!=0;release();w=fw;h=fh;noGame=fast||flag(L"CS_TEST_FSR_NO_PREPARE");ofHalf=flag(L"CS_TEST_FSR_OF_HALF");renderHalf=fast||flag(L"CS_TEST_FSR_RENDER_HALF");blendFallback=!flag(L"CS_TEST_FSR_NO_BLEND_FALLBACK");
+   flowMv=!flag(L"CS_TEST_FSR_ZERO_MV");if(flowMv){noGame=false;renderHalf=false;}}
   FfxOpticalflowContextDescription od{};od.backendInterface=iface;od.resolution={(uint32_t)(ofHalf?w/2:w),(uint32_t)(ofHalf?h/2:h)};if(ffxOpticalflowContextCreate(&of,&od))return false;
   FfxFrameInterpolationContextDescription fd{};fd.backendInterface=iface;fd.maxRenderSize={(uint32_t)w,(uint32_t)h};fd.displaySize={(uint32_t)w,(uint32_t)h};
   fd.backBufferFormat=FFX_SURFACE_FORMAT_R8G8B8A8_UNORM;fd.previousInterpolationSourceFormat=FFX_SURFACE_FORMAT_R8G8B8A8_UNORM;if(ffxFrameInterpolationContextCreate(&fi,&fd)){ffxOpticalflowContextDestroy(&of);return false;}
@@ -133,6 +153,10 @@ FfxOpticalflowContext of{};FfxFrameInterpolationContext fi{};FfxOpticalflowShare
   if(!makeImage(color,VK_FORMAT_R8G8B8A8_UNORM,L"cs_color",FFX_RESOURCE_USAGE_READ_ONLY)||!makeImage(out,VK_FORMAT_R8G8B8A8_UNORM,L"cs_output",FFX_RESOURCE_USAGE_UAV)||
      !makeImage(depth,VK_FORMAT_R32_SFLOAT,L"cs_depth",FFX_RESOURCE_USAGE_READ_ONLY)||!makeImage(mv,VK_FORMAT_R16G16_SFLOAT,L"cs_motion",FFX_RESOURCE_USAGE_READ_ONLY)||
      !makeBuffer(up,bytes)||!makeBuffer(down,bytes,true))return false;
+  if(flowMv){ow=ofr.opticalFlowVector.resourceDescription.width;oh=ofr.opticalFlowVector.resourceDescription.height;
+   {wchar_t v[4];mvUpK=GetEnvironmentVariableW(L"CS_TEST_FSR_MV_UP",v,4)==1&&v[0]>=L'1'&&v[0]<=L'8'?v[0]-L'0':4;}mvMed=flag(L"CS_TEST_FSR_MV_MED");
+   ru=std::min<uint32_t>(ow*mvUpK,w);rh=std::min<uint32_t>(oh*mvUpK,h);
+   if(!ow||!oh||ow>(uint32_t)w||oh>(uint32_t)h||!makeBuffer(ofDown,(size_t)ow*oh*4,true)||!makeBuffer(mvUp,(size_t)ru*rh*4))return false;}
   if(ofHalf&&!makeImage(colorHalf,VK_FORMAT_R8G8B8A8_UNORM,L"cs_color_half",FFX_RESOURCE_USAGE_READ_ONLY,w/2,h/2))return false;
   {wchar_t v[4];bool cpu=GetEnvironmentVariableW(L"CS_TEST_FSR_CPU_SWAP",v,4)==1&&v[0]==L'1';
    gpuSwap=!cpu&&blitFormat(VK_FORMAT_B8G8R8A8_UNORM)&&blitFormat(VK_FORMAT_R8G8B8A8_UNORM)&&plainImage(inBgra,VK_FORMAT_B8G8R8A8_UNORM)&&plainImage(outBgra,VK_FORMAT_B8G8R8A8_UNORM);
@@ -147,10 +171,11 @@ FfxOpticalflowContext of{};FfxFrameInterpolationContext fi{};FfxOpticalflowShare
  // Feed one frame; when wantOutput, the midpoint between the previous and this frame is read back.
  bool feed(const uint8_t* bgr,bool reset,uint8_t* bgrOut){
   const bool gpu=gpuSwap&&ch==4;
-  auto t0=std::chrono::steady_clock::now();if(gpu)copy((uint8_t*)up.map,bgr,(size_t)w*h*4);else cs_to_4(bgr,ch,(uint8_t*)up.map,(size_t)w*h,true);if(!begin())return false;
+  auto t0=std::chrono::steady_clock::now();if(!gIn){if(gpu)copy((uint8_t*)up.map,bgr,(size_t)w*h*4);else cs_to_4(bgr,ch,(uint8_t*)up.map,(size_t)w*h,true);}if(!begin())return false;
   profileStart();mark(0);
   VkBufferImageCopy c{};c.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};c.imageExtent={(uint32_t)w,(uint32_t)h,1};
-  if(gpu){barrier(cb,inBgra.img,VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);vkCmdCopyBufferToImage(cb,up.buf,inBgra.img,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&c);
+  if(gIn){barrier(cb,color.img,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);gblit(gIn,VK_IMAGE_LAYOUT_GENERAL,color.img,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);}
+  else if(gpu){barrier(cb,inBgra.img,VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);vkCmdCopyBufferToImage(cb,up.buf,inBgra.img,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&c);
    barrier(cb,inBgra.img,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
    barrier(cb,color.img,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);blit(inBgra.img,color.img);}
   else{barrier(cb,color.img,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);vkCmdCopyBufferToImage(cb,up.buf,color.img,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&c);}
@@ -159,25 +184,49 @@ FfxOpticalflowContext of{};FfxFrameInterpolationContext fi{};FfxOpticalflowShare
    vkCmdBlitImage(cb,color.img,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,colorHalf.img,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&hb,VK_FILTER_LINEAR);
    barrier(cb,colorHalf.img,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);barrier(cb,color.img,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);}
   else barrier(cb,color.img,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);mark(1);
+  bool useMv=false,ofDone=false;FfxOpticalflowDispatchDescription o{};
+  if(flowMv&&!reset){
+   o.commandList=ffxGetCommandListVK(cb);o.color=ofHalf?colorHalf.res:color.res;o.opticalFlowVector=shared.fpGetResource(&shared,ofVec);o.opticalFlowSCD=shared.fpGetResource(&shared,ofScd);
+   o.reset=false;o.backbufferTransferFunction=FFX_BACKBUFFER_TRANSFER_FUNCTION_SRGB;o.minMaxLuminance={0,1};if(ffxOpticalflowContextDispatch(&of,&o))return false;ofDone=true;
+   VkImage flow=(VkImage)o.opticalFlowVector.resource;VkBufferImageCopy fc{};fc.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};fc.imageExtent={ow,oh,1};
+   barrier(cb,flow,VK_IMAGE_LAYOUT_GENERAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);vkCmdCopyImageToBuffer(cb,flow,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,ofDown.buf,1,&fc);
+   barrier(cb,flow,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_GENERAL);
+   if(!submit()||!begin())return false;
+   const int16_t* v=(const int16_t*)ofDown.map;uint16_t* m=(uint16_t*)mvUp.map;const float k=ofHalf?2.f:1.f; // flow vectors are in flow-image pixels
+   if(mvUpK==1&&!mvMed)for(size_t i=0,n=(size_t)ow*oh*2;i<n;i++)m[i]=toHalf(v[i]*k);
+   else{mvTmp.resize((size_t)ow*oh*2);for(size_t i=0;i<mvTmp.size();i++)mvTmp[i]=v[i]*k;
+    if(mvMed){std::vector<float> src=mvTmp;for(int y=0;y<(int)oh;y++)for(int x=0;x<(int)ow;x++)for(int c=0;c<2;c++){float t[9];int n=0;
+      for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++){int yy=std::min(std::max(y+dy,0),(int)oh-1),xx=std::min(std::max(x+dx,0),(int)ow-1);t[n++]=src[((size_t)yy*ow+xx)*2+c];}
+      std::nth_element(t,t+4,t+9);mvTmp[((size_t)y*ow+x)*2+c]=t[4];}}
+    const float inv=1.f/mvUpK;for(uint32_t y=0;y<rh;y++){float fy=(y+0.5f)*inv-0.5f;int y0=(int)std::floor(fy);float ay=fy-y0;int y1=std::min(y0+1,(int)oh-1);y0=std::max(y0,0);
+     for(uint32_t x=0;x<ru;x++){float fx=(x+0.5f)*inv-0.5f;int x0=(int)std::floor(fx);float ax=fx-x0;int x1=std::min(x0+1,(int)ow-1);x0=std::max(x0,0);
+      for(int c=0;c<2;c++){auto at=[&](int yy,int xx){return mvTmp[((size_t)yy*ow+xx)*2+c];};
+       float r=(at(y0,x0)*(1-ax)+at(y0,x1)*ax)*(1-ay)+(at(y1,x0)*(1-ax)+at(y1,x1)*ax)*ay;m[((size_t)y*ru+x)*2+c]=toHalf(r);}}}}
+   fc.imageExtent={ru,rh,1};
+   barrier(cb,mv.img,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);vkCmdCopyBufferToImage(cb,mvUp.buf,mv.img,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&fc);
+   barrier(cb,mv.img,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);useMv=true;}
   FfxCommandList cl=ffxGetCommandListVK(cb);++frameId;
-  FfxFrameInterpolationPrepareDescription pd{};pd.commandList=cl;pd.renderSize={(uint32_t)(renderHalf?w/2:w),(uint32_t)(renderHalf?h/2:h)};pd.motionVectorScale={0,0};pd.frameTimeDelta=1000.f/60;pd.cameraNear=0.1f;pd.cameraFar=1000.f;
+  FfxFrameInterpolationPrepareDescription pd{};pd.commandList=cl;pd.renderSize=flowMv?FfxDimensions2D{ru,rh}:FfxDimensions2D{(uint32_t)(renderHalf?w/2:w),(uint32_t)(renderHalf?h/2:h)};
+  pd.motionVectorScale=useMv?FfxFloatCoords2D{(float)ru/w,(float)rh/h}:FfxFloatCoords2D{0,0}; // scale/renderSize = 1/displaySizepd.frameTimeDelta=1000.f/60;pd.cameraNear=0.1f;pd.cameraFar=1000.f;
   pd.viewSpaceToMetersFactor=1;pd.cameraFovAngleVertical=1.0f;pd.depth=depth.res;pd.motionVectors=mv.res;pd.frameID=frameId;
   pd.dilatedDepth=shared.fpGetResource(&shared,dilD);pd.dilatedMotionVectors=shared.fpGetResource(&shared,dilMV);pd.reconstructedPrevDepth=shared.fpGetResource(&shared,recD);
   if((!noGame||reset)&&ffxFrameInterpolationPrepare(&fi,&pd))return false;mark(2);
-  FfxOpticalflowDispatchDescription o{};o.commandList=cl;o.color=ofHalf?colorHalf.res:color.res;o.opticalFlowVector=shared.fpGetResource(&shared,ofVec);o.opticalFlowSCD=shared.fpGetResource(&shared,ofScd);
-  o.reset=reset;o.backbufferTransferFunction=FFX_BACKBUFFER_TRANSFER_FUNCTION_SRGB;o.minMaxLuminance={0,1};if(ffxOpticalflowContextDispatch(&of,&o))return false;mark(3);
+  if(!ofDone){o.commandList=cl;o.color=ofHalf?colorHalf.res:color.res;o.opticalFlowVector=shared.fpGetResource(&shared,ofVec);o.opticalFlowSCD=shared.fpGetResource(&shared,ofScd);
+  o.reset=reset;o.backbufferTransferFunction=FFX_BACKBUFFER_TRANSFER_FUNCTION_SRGB;o.minMaxLuminance={0,1};if(ffxOpticalflowContextDispatch(&of,&o))return false;}mark(3);
   FfxFrameInterpolationDispatchDescription d{};d.commandList=cl;d.displaySize={(uint32_t)w,(uint32_t)h};d.renderSize=pd.renderSize;d.currentBackBuffer=color.res;d.output=out.res;d.interpolationRect={0,0,w,h};
   d.opticalFlowVector=o.opticalFlowVector;d.opticalFlowSceneChangeDetection=o.opticalFlowSCD;d.opticalFlowBlockSize=8;d.opticalFlowScale=ofHalf?FfxFloatCoords2D{2.f/w,2.f/h}:FfxFloatCoords2D{1.f/w,1.f/h};
   d.opticalFlowBufferSize={ofr.opticalFlowVector.resourceDescription.width,ofr.opticalFlowVector.resourceDescription.height};d.cameraNear=0.1f;d.cameraFar=1000.f;d.cameraFovAngleVertical=1.0f;
   d.viewSpaceToMetersFactor=1;d.frameTimeDelta=1000.f/60;d.reset=reset;d.backBufferTransferFunction=FFX_BACKBUFFER_TRANSFER_FUNCTION_SRGB;d.minMaxLuminance[0]=0;d.minMaxLuminance[1]=1;d.frameID=frameId;
   d.dilatedDepth=pd.dilatedDepth;d.dilatedMotionVectors=pd.dilatedMotionVectors;d.reconstructedPrevDepth=pd.reconstructedPrevDepth;if(ffxFrameInterpolationDispatch(&fi,&d))return false;mark(4);
-  if(bgrOut&&gpu){barrier(cb,out.img,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);barrier(cb,outBgra.img,VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+  if(bgrOut&&gOut){barrier(cb,out.img,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);gblit(out.img,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,gOut,VK_IMAGE_LAYOUT_GENERAL);
+   barrier(cb,out.img,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);}
+  else if(bgrOut&&gpu){barrier(cb,out.img,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);barrier(cb,outBgra.img,VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
    blit(out.img,outBgra.img);barrier(cb,out.img,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
    barrier(cb,outBgra.img,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);vkCmdCopyImageToBuffer(cb,outBgra.img,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,down.buf,1,&c);}
   else if(bgrOut){barrier(cb,out.img,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);vkCmdCopyImageToBuffer(cb,out.img,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,down.buf,1,&c);
    barrier(cb,out.img,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);}
   mark(5);auto t1=std::chrono::steady_clock::now();if(!submit())return false;auto t2=std::chrono::steady_clock::now();profileEnd(bgrOut!=nullptr);
-  if(bgrOut){if(gpu)copyOpaque(bgrOut,(const uint8_t*)down.map,(size_t)w*h*4);else cs_from_4((const uint8_t*)down.map,bgrOut,ch,(size_t)w*h,true);}auto t3=std::chrono::steady_clock::now();
+  if(bgrOut&&!gOut){if(gpu)copyOpaque(bgrOut,(const uint8_t*)down.map,(size_t)w*h*4);else cs_from_4((const uint8_t*)down.map,bgrOut,ch,(size_t)w*h,true);}auto t3=std::chrono::steady_clock::now();
   using ms=std::chrono::duration<double,std::milli>;stage[0]+=ms(t1-t0).count();stage[1]+=ms(t2-t1).count();stage[2]+=ms(t3-t2).count();return true;}
  int process(const uint8_t* a,const uint8_t* b,int fw,int fh,int pixelBytes,float t,uint8_t* o,uint64_t aid,uint64_t bid)override{
   ch=pixelBytes;const size_t bytes=(size_t)fw*fh*pixelBytes;
@@ -231,7 +280,11 @@ SeqEngine* cs_create_fsr3(uint32_t vendorId,uint32_t deviceId,std::string& error
  vkGetPhysicalDeviceFeatures2(f->phys,&f2);f2.features.robustBufferAccess=VK_FALSE;
  uint32_t en=0;vkEnumerateDeviceExtensionProperties(f->phys,nullptr,&en,nullptr);std::vector<VkExtensionProperties> ep(en);vkEnumerateDeviceExtensionProperties(f->phys,nullptr,&en,ep.data());
  std::vector<const char*> ext;for(const char* want:{VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME,VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME,VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
-  VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME})for(auto& e:ep)if(!strcmp(e.extensionName,want))ext.push_back(want);
+  VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME
+#ifdef CS_INTERNAL_VFG
+  ,"VK_KHR_external_memory_win32" /* 11-18 GPU path */
+#endif
+  })for(auto& e:ep)if(!strcmp(e.extensionName,want))ext.push_back(want);
  float prio=1;VkDeviceQueueCreateInfo qi{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};qi.queueFamilyIndex=f->family;qi.queueCount=1;qi.pQueuePriorities=&prio;
  VkDeviceCreateInfo di{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};di.pNext=&f2;di.queueCreateInfoCount=1;di.pQueueCreateInfos=&qi;di.enabledExtensionCount=(uint32_t)ext.size();di.ppEnabledExtensionNames=ext.data();
  if(vkCreateDevice(f->phys,&di,nullptr,&f->dev)){f->dev=VK_NULL_HANDLE;error="Vulkan device creation failed";return nullptr;}
@@ -247,6 +300,50 @@ SeqEngine* cs_create_fsr3(uint32_t vendorId,uint32_t deviceId,std::string& error
     f->shared.fpCreateBackendContext(&f->shared,FFX_EFFECT_SHAREDRESOURCES,nullptr,&f->sharedId)){error="FidelityFX backend initialization failed";return nullptr;}
  f->backend=true;return f.release();
 }
+
+#ifdef CS_INTERNAL_VFG
+#include <vulkan/vulkan_win32.h>
+int cs_engine_family(void* p);
+// 11-18 internal GPU path: same slot API as cs_gpu_ctx_* (RIFE). The plugin's engine handle owns the FSR 3 context.
+SeqEngine* cs_engine_seq(void* p);
+static thread_local std::string fsr_gpu_err;
+extern "C" __declspec(dllexport) const char* cs_fsr3_gpu_error(){return fsr_gpu_err.c_str();}
+extern "C" __declspec(dllexport) void* cs_fsr3_gpu_ctx_create(void* engine,int w,int h,uint8_t* luid8){
+ fsr_gpu_err.clear();auto* f=cs_engine_family(engine)==3?static_cast<Fsr3*>(cs_engine_seq(engine)):nullptr;if(!f){fsr_gpu_err="no FSR 3 engine";return nullptr;}
+ f->ch=4;if(f->w!=w||f->h!=h){if(!f->resize(w,h)){f->release();fsr_gpu_err="resize";return nullptr;}}
+ if(!f->gpuSwap){fsr_gpu_err="BGRA blit unsupported";return nullptr;}
+ VkPhysicalDeviceIDProperties idp{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES};VkPhysicalDeviceProperties2 p2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};p2.pNext=&idp;
+ vkGetPhysicalDeviceProperties2(f->phys,&p2);if(!idp.deviceLUIDValid){fsr_gpu_err="no LUID";return nullptr;}if(luid8)memcpy(luid8,idp.deviceLUID,8);
+ if(!vkGetDeviceProcAddr(f->dev,"vkGetMemoryWin32HandlePropertiesKHR")){fsr_gpu_err="external memory win32 not enabled";return nullptr;}
+ return f;
+}
+extern "C" __declspec(dllexport) int cs_fsr3_gpu_ctx_import(void* p,HANDLE handle){
+ auto* f=static_cast<Fsr3*>(p);if(!f||f->gslots>=8)return -1;auto& s=f->gslot[f->gslots];
+ auto props=(PFN_vkGetMemoryWin32HandlePropertiesKHR)vkGetDeviceProcAddr(f->dev,"vkGetMemoryWin32HandlePropertiesKHR");
+ VkExternalMemoryImageCreateInfo ext{VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO};ext.handleTypes=VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT;
+ VkImageCreateInfo ic{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};ic.pNext=&ext;ic.imageType=VK_IMAGE_TYPE_2D;ic.format=VK_FORMAT_B8G8R8A8_UNORM;ic.extent={(uint32_t)f->w,(uint32_t)f->h,1};
+ ic.mipLevels=1;ic.arrayLayers=1;ic.samples=VK_SAMPLE_COUNT_1_BIT;ic.tiling=VK_IMAGE_TILING_OPTIMAL;ic.usage=VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT;ic.initialLayout=VK_IMAGE_LAYOUT_UNDEFINED;
+ if(vkCreateImage(f->dev,&ic,nullptr,&s.img)){fsr_gpu_err="vkCreateImage";return -2;}
+ VkMemoryRequirements mr;vkGetImageMemoryRequirements(f->dev,s.img,&mr);VkMemoryWin32HandlePropertiesKHR hp{VK_STRUCTURE_TYPE_MEMORY_WIN32_HANDLE_PROPERTIES_KHR};
+ if(!props||props(f->dev,VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT,handle,&hp)){fsr_gpu_err="handle properties";return -3;}
+ uint32_t bits=mr.memoryTypeBits&hp.memoryTypeBits,type=0;if(!bits){fsr_gpu_err="memory type";return -4;}while(!(bits&(1u<<type)))type++;
+ VkMemoryDedicatedAllocateInfo ded{VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO};ded.image=s.img;
+ VkImportMemoryWin32HandleInfoKHR imp{VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_KHR};imp.pNext=&ded;imp.handleType=VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT;imp.handle=handle;
+ VkMemoryAllocateInfo ma{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};ma.pNext=&imp;ma.allocationSize=mr.size;ma.memoryTypeIndex=type;
+ if(vkAllocateMemory(f->dev,&ma,nullptr,&s.mem)||vkBindImageMemory(f->dev,s.img,s.mem,0)){fsr_gpu_err="import memory";return -5;}
+ if(!f->begin())return -6;barrier(f->cb,s.img,VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_GENERAL);if(!f->submit()){fsr_gpu_err="layout";return -7;}
+ return f->gslots++;
+}
+extern "C" __declspec(dllexport) int cs_fsr3_gpu_ctx_generate(void* p,int a,uint64_t aid,int b,uint64_t bid,int out,float t,double* ms3){
+ auto* f=static_cast<Fsr3*>(p);if(!f||a<0||b<0||out<0||a>=f->gslots||b>=f->gslots||out>=f->gslots)return -1;if(t<.499f||t>.501f){fsr_gpu_err="midpoint only";return -4;}
+ auto t0=std::chrono::steady_clock::now();uint8_t dummy=0;bool ok=true;f->stage[0]=f->stage[1]=f->stage[2]=0;
+ if(!aid||f->last!=aid){f->gIn=f->gslot[a].img;f->gOut=VK_NULL_HANDLE;ok=f->feed(nullptr,true,nullptr);}
+ if(ok){f->gIn=f->gslot[b].img;f->gOut=f->gslot[out].img;ok=f->feed(nullptr,false,&dummy);}
+ f->gIn=f->gOut=VK_NULL_HANDLE;if(!ok){f->last=0;fsr_gpu_err="feed";return -2;}f->last=bid;
+ if(ms3){ms3[0]=0;ms3[1]=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();ms3[2]=0;}return 0;
+}
+extern "C" __declspec(dllexport) void cs_fsr3_gpu_ctx_destroy(void* p){auto* f=static_cast<Fsr3*>(p);if(!f)return;vkDeviceWaitIdle(f->dev);f->gfree();}
+#endif
 
 // Pixel conversions (moved from the removed NVIDIA FRUC engine in 1.6.5).
 // 1.8.0: conversions run on one persistent pool (three threads were created per call). Never freed: no thread

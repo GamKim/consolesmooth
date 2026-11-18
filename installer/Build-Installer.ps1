@@ -1,11 +1,11 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param()
 # Packs build\stage (plugin DLL + engine folder) into dist\ConsoleSmooth-Plugin-Setup-<version>.exe. Run engine\Build-Engine.ps1 and plugin\Build-Plugin.ps1 first.
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 $build=Join-Path $root 'build\installer'
 $dist=Join-Path $root 'dist'
-$version='1.0.1'
+$version='1.1.0'
 New-Item -ItemType Directory -Force -Path $build,$dist | Out-Null
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem

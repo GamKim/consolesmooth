@@ -347,6 +347,7 @@ static int init(void *plugin){
  if(GetEnvironmentVariableW(L"CS_TEST_PACE_LEAD",mode,16)-1u<15u)pace_lead=_wtof(mode);
  if(GetEnvironmentVariableW(L"CS_TEST_PACE_LATCH",mode,16)-1u<15u)pace_latch=_wtof(mode);
  direct_forced=GetEnvironmentVariableW(L"CS_TEST_DIRECT",mode,16)==1&&mode[0]==L'1';direct_mode=direct_forced;if(direct_forced)logline("TEST_DIRECT enabled=1");
+ test_lowview=GetEnvironmentVariableW(L"CS_TEST_LOWVIEW",mode,16)==1&&mode[0]==L'1';if(test_lowview){InterlockedExchange(&low_view,1);logline("TEST_LOWVIEW enabled=1");}
  /* 1.7.9: on by default. 11-08 FG_INPUT_SPANS showed why the original stream repeated frames: every ~255 s the capture
   * and host clocks put source arrivals on a tick boundary for 10-20 s (spans of 1 and 3 ticks instead of 2), and the
   * encoder's 120->60 thinning then sampled one picture twice. CS_TEST_ORIGINAL_DEDUP=0 turns it off (A/B only). */

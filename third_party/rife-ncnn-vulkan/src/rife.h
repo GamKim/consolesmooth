@@ -33,6 +33,9 @@ public:
     int process_v4_tagged(const ncnn::Mat&,const ncnn::Mat&,float,ncnn::Mat&,uint64_t,uint64_t) const;
     // ConsoleSmooth: set before load(). RIFE v4 flow at half size (inference scale 0.5);
     // the output image stays full size. Requires padding 64.
+    // 11-18 internal GPU path: BGRA frames already on the GPU (D3D11 shared texture imported in Vulkan).
+    int process_v4_gpu(const ncnn::VkMat& a,const ncnn::VkMat& b,float t,ncnn::VkMat& packed,uint64_t aid,uint64_t bid) const;
+    ncnn::VulkanDevice* device() const { return vkdev; }
     bool flow_half = false;
     // 1.6.5: flow size relative to the image when flow_half is set (0.5 UHD, 0.75 QHD; padding 64 / 128).
     float flow_scale = 0.5f;

@@ -1,6 +1,7 @@
 // rife implemented with ncnn library
 
 #include "rife.h"
+#include <map>
 
 #include <algorithm>
 #include <vector>
@@ -103,7 +104,8 @@ static int load_param_model(ncnn::Net& net, const std::wstring& modeldir, const 
 // extractor can stay in light mode. A weight-free tail network resizes them to full
 // size (flow values x2), then warps and blends the full-size images exactly like the
 // end of the export (warp_6/warp_7, mul_76/77, add_78).
-// Returns an empty string when the layout is not the RIFE 4.6 export.
+// Returns an empty string when the final flow/mask cannot be found (2.2.6: found by structure,
+// so RIFE 4.6 and the 4.15+ exports both work; 4.6 output is byte-identical to the name-based patch).
 static std::string flow_half_head(const std::string& text,float scale)
 {
     std::vector<std::vector<std::string>> lines;size_t pos=0;
@@ -114,7 +116,21 @@ static std::string flow_half_head(const std::string& text,float scale)
         lines.push_back(tok);pos=end+1;
     }
     if(lines.size()<3||lines[0].size()!=1||lines[1].size()!=2)return "";
-    int layers=0,blobs=0,found=0;
+    // 11-16: find the final flow and pre-sigmoid mask by structure, not by layer name, so RIFE 4.15+ exports work.
+    // Final flow F: the Split whose outputs feed the two Crops (channels 0-2 / 2-4) in front of the last rife.Warp pair.
+    // Mask M: the input of the last Sigmoid. Each producer gets a Split that adds one more consumer (cs_flow / cs_mask).
+    auto field=[](const std::vector<std::string>& t,int k)->int{return t.size()>3?atoi(t[k].c_str()):0;};
+    std::map<std::string,size_t> producer;std::string M,warpFlow;
+    for(size_t n=2;n<lines.size();n++){auto& t=lines[n];if(t.size()<4)continue;int ni=field(t,2),no=field(t,3);
+        for(int o=0;o<no&&4+ni+o<(int)t.size();o++)producer[t[4+ni+o]]=n;
+        if(t[0]=="Sigmoid"&&ni==1)M=t[4];
+        if(t[0]=="rife.Warp"&&ni==2)warpFlow=t[5];}
+    if(M.empty()||warpFlow.empty()||!producer.count(warpFlow))return "";
+    std::string F;{auto& c=lines[producer[warpFlow]];if(c[0]!="Crop"||!producer.count(c[4]))return "";
+        auto& sp=lines[producer[c[4]]];F=sp[0]=="Split"?sp[4]:c[4];}
+    if(!producer.count(F)||!producer.count(M))return "";
+    size_t pF=producer[F],pM=producer[M];
+    int layers=0,blobs=0,found=2;
     std::vector<std::vector<std::string>> out={lines[0],lines[1]};
     for(size_t n=2;n<lines.size();n++){
         auto t=lines[n];if(t.empty())continue;
@@ -124,12 +140,11 @@ static std::string flow_half_head(const std::string& text,float scale)
             out.push_back({"Interp","cs_half_"+t[1],"1","1",full,t[1],"0=2",std::string("1=")+sc,std::string("2=")+sc});
             ++layers;++blobs;++found;continue;
         }
-        if(t.size()==7&&t[0]=="Split"&&t[1]=="splitncnn_45"&&t[2]=="1"&&t[3]=="2"&&t[4]=="327"){t[3]="3";t.push_back("cs_flow");++blobs;++found;}
-        if(t.size()>=6&&t[0]=="Sigmoid"&&t[1]=="sigmoid_8"&&t[4]=="331"){
-            out.push_back({"Split","cs_split_mask","1","2","331","cs_mask_sig","cs_mask"});
-            t[4]="cs_mask_sig";++layers;blobs+=2;++found;
-        }
-        out.push_back(t);
+        std::vector<std::vector<std::string>> after;
+        for(int k=0;k<2;k++){size_t pn=k?pM:pF;const std::string& blob=k?M:F;if(n!=pn)continue;
+            int ni=field(t,2);for(size_t j=4+ni;j<t.size();j++)if(t[j]==blob){t[j]="cs_src_"+blob;break;}
+            after.push_back({"Split",k?"cs_split_mask":"cs_split_flow","1","2","cs_src_"+blob,blob,k?"cs_mask":"cs_flow"});++layers;blobs+=2;}
+        out.push_back(t);for(auto& x:after)out.push_back(x);
     }
     if(found!=4)return "";
     out.push_back({"Concat","cs_cat","2","1","cs_flow","cs_mask","cs_flowmask"});++layers;++blobs;

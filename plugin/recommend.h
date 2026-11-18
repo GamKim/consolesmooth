@@ -241,7 +241,11 @@ static void ui_reco_finish(void){
  /* Low-latency buffer (FHD and below, 50+ fps in, 2x): half an output tick + 1.3 x time + 4 ms, as the engine sizes it. */
  int out=mode?target:src*mult,eligible=(int64_t)r->w*r->h<=1920LL*1080&&src>=50&&out==2*src,low=25;
  /* 2.2.4 (friend test 11-14, 4070 Ti: 15 ms not recommended): at least 17 ms. */
- if(eligible&&cost>0){low=(int)ceil(500.0/out+1.3*cost+4);if(low<17)low=17;if(low>25)low=25;}
+ /* 2.3.1 (11-18 buffer sweep, RTX 5080, low latency view, CPU path, 15/17/20/25 ms): 99%+ generated needed AMD FG (3.2 ms) 17,
+  * DLSS FG (3.8 ms) 20, RIFE 4.6 (7.2 ms) and FSR 3 (7.8 ms) 25 (96% at 20). Originals left the engine 17.5 ms after arrival at
+  * 15-20 ms vs 28 ms at 25. Rule: half an output tick + 3 x time + 4 ms, 15-25 ms (the 1.3 x rule picked 19 for RIFE: 96%).
+  * With the low latency view in full screen the 2.3.x GPU path does not use this buffer at all. */
+ if(eligible&&cost>0){low=(int)ceil(500.0/out+3.0*cost+4);if(low<15)low=15;if(low>25)low=25;}
  /* 2.2.4: RIFE made it but not cleanly (95-99%): stable keeps a longer buffer instead of risking "generation short". */
  int stable=r->trial&&model==0&&r->rife_gen>0&&r->rife_gen<.99,sync=vrr==1?1:0;
  /* 2.2.2 (user 11-11: 30fps smoothing off plays much better; it stays an option): the button no longer turns it on for a 30 fps

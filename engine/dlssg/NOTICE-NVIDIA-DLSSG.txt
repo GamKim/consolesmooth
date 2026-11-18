@@ -1,0 +1,7 @@
+ConsoleSmooth engine slot: NVIDIA DLSS Frame Generation (NGX DLSSG API, offscreen, NVIDIA RTX 40/50 only).
+This software uses NVIDIA DLSS. NVIDIA, the NVIDIA logo and DLSS are trademarks of NVIDIA Corporation.
+cs_dlssg.dll is ConsoleSmooth code built against the public DLSS SDK headers (not part of the ConsoleSmooth source).
+nvngx_dlssg.dll is NVIDIA's signed runtime from the public NVIDIA Streamline/DLSS SDK (310.9.16), redistributed unmodified
+with the installer under the NVIDIA RTX SDKs license (LICENSE-NVIDIA-RTX-SDK.txt beside this file). It is not part of the
+ConsoleSmooth source repository and is not covered by the ConsoleSmooth MIT license.
+A newer runtime can be used with CS_DLSSG_DIR or Get-NvidiaDlssg.ps1 (copy from the NVIDIA app's DLSS cache).
