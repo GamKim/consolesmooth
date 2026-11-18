@@ -82,9 +82,11 @@ static int record_mode;
 static void record_watch_free(void *data){RecordWatch *w=data;logline("RECORD_ROUTE_STOP generated_mode=%d buffers=%llu originals=%llu missing=%llu dedup_dropped=%llu",w->generated,(unsigned long long)w->count,(unsigned long long)w->restored,(unsigned long long)w->missing,(unsigned long long)w->dropped);AcquireSRWLockExclusive(&auto_filter_lock);InterlockedDecrement(&record_branches);ReleaseSRWLockExclusive(&auto_filter_lock);HeapFree(GetProcessHeap(),0,w);}
 static int record_buffer(void *pad,void *info,void *data){
  (void)pad;RecordWatch *w=data;++w->count;
- /* 2.2.0 beta low latency view: recording and streaming get no picture while it is on. */
- if(InterlockedCompareExchange(&low_view,0,0)){++w->dropped;return 0;}
+ /* 2.3.8 (11-18 user): recording and streaming go on while the low latency view is shown (2.2.0-2.3.7 dropped them; turning the
+  * view on mid-recording froze the file). The view window is fed separately, so the record route simply keeps its frames. */
  if(w->generated)return 1;
+ /* 2.3.7: GPU path (originals): its buffers carry no original qdata; pass everything except buffers it marked generated. */
+ if(InterlockedCompareExchange(&gpu_path_active,0,0)==1){if(cs_buf_generated(probe_buffer(info))){++w->dropped;return 0;}++w->restored;return 1;}
  void *buffer=probe_buffer(info),*original=buffer?mini_get_data(buffer,original_key):NULL;
  if(original_dedup&&buffer){int64_t pts=*(int64_t*)((char*)buffer+72); /* keep a picture at least every 50 ms when the image stands still */
   if(w->count>30&&!mini_get_data(buffer,tick_new_key)&&pts>=0&&pts-w->last_pts<50000000LL){++w->dropped;return 0;}w->last_pts=pts;}
@@ -104,8 +106,10 @@ static int record_watch(void *src,void *sink){
   record_rate=auto_snapshot();if(auto_applied_rate.supported){record_rate.tn=auto_applied_rate.tn;record_rate.td=auto_applied_rate.td;}
   /* 1.7.1: "generated frames" only while generation is really running when the recording starts; otherwise the
    * file kept the generation rate with every image twice (user decision 11-07: save the originals instead). */
-  int want=InterlockedCompareExchange(&record_generated,0,0),running=InterlockedCompareExchange(&frame_generating,0,0)!=0;
-  record_mode=want&&running;if(want&&!running)logline("RECORD_GENERATED_OFF generation_not_running=1 saving=originals");
+  int want=InterlockedCompareExchange(&record_generated,0,0),running=InterlockedCompareExchange(&frame_generating,0,0)!=0||InterlockedCompareExchange(&gpu_gen_running,0,0)!=0;
+  /* 2.3.9 (11-18 user): "생성 프레임 포함" records at the chosen output rate from the start, whether generation is on yet or not
+   * (while it is off each picture repeats). Turning generation on or off during a recording or stream then just works. */
+  record_mode=want;if(want&&!running)logline("RECORD_GENERATED_RATE generation_not_running_yet=1 saving=output_rate");
  }
  w->generated=record_mode;InterlockedIncrement(&record_branches);ReleaseSRWLockExclusive(&auto_filter_lock);
  if(!add_probe(src,1<<4,record_buffer,w,record_watch_free)){record_watch_free(w);record_block(src,sink);return 0;}

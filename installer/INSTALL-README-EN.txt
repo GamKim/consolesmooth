@@ -43,10 +43,10 @@ Settings (frame generation settings window)
 - FPS display: shows "input / now fps" by default (capture signal / frames shown per second). With "Show the game's real frame rate" on it shows "original / now fps" (e.g. 30 / 60 fps). Original = new game pictures per second,
   now = original + generated. A still picture reads 0 / 0. The first 2 s after turning on show signal / output fps.
 - Latency priority (under Latency, off by default, RIFE only): computes motion at 1/4 size for a slightly smaller buffer (RTX 5080: 16.2 ms) at about 0.9 dB lower quality.
-- Recording source: Original or With generated frames, from the next recording.
+- Recording source: Original or With generated frames, from the next recording. With generated: recording and streaming run at the output rate from the start, so generation can be turned on later (pictures repeat while it is off).
 - Sharpen full screen (display tab, off by default): sharper upscale and sharpening in full screen.
 - Display: Window or Full screen (Esc closes it and turns frame generation off; turning it on again opens full screen). Full screen has less display latency.
-- Low latency view (off by default): when turned on with the button or shortcut, shows the incoming picture in full screen right away. While shown, recording and streaming get no picture.
+- Low latency view (off by default): when turned on with the button or shortcut, shows the incoming picture in full screen right away. Recording and streaming go on while it is shown.
   With low latency view + full screen + Low latency + 2x, frames are made on the graphics card and sent straight to the screen (fast path, about 9-19 ms after the original).
   The fast path is chosen when Streaming Center starts: after changing the model or display settings, restart Streaming Center as the settings window says.
   If the fast path fails on a PC, this is remembered and the next start uses the standard path (choosing the model again retries). Laptops with two GPUs use the standard path.

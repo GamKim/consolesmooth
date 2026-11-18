@@ -19,10 +19,10 @@ This is a personal project, not affiliated with AVerMedia, and it contains no AV
 ## Features
 
 - **Works inside Streaming Center**: no window capture or overlay. Turn it on and off with the toolbar button or a shortcut (Ctrl+Alt+F by default, changeable in the Advanced tab). In full screen, Esc closes it and turns generation off. The settings window only chooses and saves; settings apply when you turn it on.
-- **Low latency view**: the on button or shortcut shows the picture in full screen right away. With low latency view + full screen + 2x, frames are made on the graphics card and sent straight to the screen (the fast path). While it is on, recording and streaming get no picture.
+- **Low latency view**: the on button or shortcut shows the picture in full screen right away. With low latency view + full screen + 2x, frames are made on the graphics card and sent straight to the screen (the fast path). Recording and streaming go on while it is shown.
   - The fast path is chosen when Streaming Center starts. If you change the model or display settings, the settings window tells you to restart.
   - If the fast path does not work on a PC, the next start uses the standard path automatically.
-- **Record generated frames**: with the recording source set to "include generated frames" the file is saved at the output rate (e.g. 120/160 fps) while the low latency view is off. A 30 fps game in a 120 fps file still has game fps × multiplier new pictures (60 at 2x).
+- **Record and stream generated frames**: with the recording source set to "With generated", recording and streaming run at the output rate (e.g. 120 fps) from the start. Turning generation or the low latency view on or off during a recording or stream does not interrupt it (while generation is off, each picture repeats). New pictures per second = game fps × multiplier (60 fps game at 2x → 120, 30 fps game at 2x → 60).
 - **On-screen display protection (HUD keep)**: fixed screen elements such as health bars, maps and button prompts (semi-transparent ones too) are taken from the original to reduce wobble.
 - **30 fps smoothing**: shows 30 fps games evenly at game fps × multiplier (2x → 30 → 60, every 16.7 ms). About +8 ms latency.
 - **On-screen numbers**: `input / now fps` by default (capture signal / pictures shown per second, e.g. 60 / 120).

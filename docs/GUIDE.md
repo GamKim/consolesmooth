@@ -82,10 +82,21 @@ Changes in the settings window are saved with **Apply** and take effect **the ne
 | Shave latency | Frame generation tab → Display: **Full screen** (shorter than a window) |
 | Even pacing in 30 fps games (GTA V quality mode, Bloodborne) | Advanced tab → **30fps smoothing** (about +8 ms latency, off by default) |
 | Fix broken HUD, text boxes or maps | Advanced tab → turn **HUD protection** off |
-| Record the generated frames | Display · recording tab → Recording source **With generated** |
+| Record and stream the generated frames | Display · recording tab → Recording source **With generated** (you can start recording or streaming first and turn generation on later) |
 | Change the on/off shortcut | Advanced tab → **On/off shortcut** |
 
 **Raise the bitrate for 120 fps recordings.** Streaming Center settings → recording settings → video bitrate 40000-50000. The default 15000 smears detail such as grass.
+
+### Recording and streaming while you play
+
+1. Display · recording tab → set Recording source to **With generated**.
+2. Start recording or streaming in Streaming Center first. It runs at the output rate (e.g. 120 fps) from the start.
+3. Turn generation on with the shortcut. With the low latency view on, the full screen opens and recording and streaming keep going.
+4. To finish: Esc (closes the full screen and turns generation off), then stop recording or streaming in Streaming Center.
+
+- While generation is off, each picture is repeated. Generated frames go in from the moment you turn it on.
+- New pictures per second = game fps × multiplier: 60 fps game at 2x → 120, 30 fps game (GTA V and so on) at 2x → 60.
+- Streaming Center streams at the preview rate (e.g. 120 fps) whatever frame rate the stream settings show (60). Check that your streaming site accepts 120 fps before you go live.
 
 ## Troubleshooting
 

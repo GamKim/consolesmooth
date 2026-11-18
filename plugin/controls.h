@@ -643,7 +643,7 @@ static void ui_refresh(void){
     if(want&&cs_models[ui_saved_model].family!=4&&!gpu_rule_single_gpu())want=0;
     if(want!=act)wcscpy(displayText,want?ui_tr(L"Streaming Center를 다시 시작하면 더 빠른 저지연 방식이 적용됩니다",L"Restart Streaming Center to use the faster low latency path"):ui_tr(L"Streaming Center를 다시 시작해야 바뀐 설정이 모두 적용됩니다",L"Restart Streaming Center to apply all changed settings"));}}
   ui_text(ui_items[156],displayText);}
- ui_text(ui_items[151],ui_record?ui_tr(L"생성 기능이 켜져 있을 때 포함 · 다음 녹화부터",L"With generated frames while on · from the next recording"):ui_tr(L"원본 · 다음 녹화부터",L"Original · from the next recording"));
+ ui_text(ui_items[151],ui_record?ui_tr(L"선택한 배수로 녹화·방송 · 생성이 꺼진 동안은 장면 반복 · 다음 녹화부터",L"Recorded and streamed at the chosen rate · repeats while generation is off · from the next recording"):ui_tr(L"원본 · 다음 녹화부터",L"Original · from the next recording"));
  EnableWindow(ui_items[143],valid&&!(recording&&rateDirty));
  POINT point;GetCursorPos(&point);HWND hover=WindowFromPoint(point);if(hover!=ui_hover){if(ui_hover&&IsWindow(ui_hover)&&(GetParent(ui_hover)==ui_panel||GetParent(ui_hover)==ui_popup))InvalidateRect(ui_hover,NULL,FALSE);ui_hover=hover;if(GetParent(hover)==ui_panel||GetParent(hover)==ui_popup)InvalidateRect(hover,NULL,FALSE);}ui_position();ui_tip_update();
 }
@@ -852,7 +852,7 @@ static DWORD WINAPI ui_main(void *unused){
  ui_child(ui_popup,L"STATIC",ui_tr(L"켜기/끄기 단축키",L"On/off shortcut"),0,195);ui_child(ui_popup,L"BUTTON",L"",button,196);ui_child(ui_popup,L"STATIC",L"",0,197);
  ui_child(ui_popup,L"STATIC",ui_tr(L"화면 동기화 (창·전체 화면)",L"Display sync (window and full screen)"),0,190);ui_child(ui_popup,L"BUTTON",ui_tr(L"수직 동기화",L"V-Sync"),button,191);ui_child(ui_popup,L"BUTTON",ui_tr(L"가변 주사율",L"Variable refresh"),button,192);ui_child(ui_popup,L"BUTTON",ui_tr(L"끔",L"Off"),button,193);
  ui_child(ui_popup,L"STATIC",ui_tr(L"가변 주사율: G-Sync·FreeSync 모니터에서 고르게 (창은 NVIDIA 창 모드 G-Sync)\r\n끔: 바로 표시해 지연이 가장 짧음 · 전체 화면은 찢어질 수 있음",L"Variable refresh: even on G-Sync/FreeSync monitors (window: NVIDIA windowed G-Sync)\r\nOff: shown at once, lowest delay · full screen may tear"),0,194);
- ui_child(ui_popup,L"STATIC",ui_tr(L"저지연 보기",L"Low latency view"),0,185);ui_child(ui_popup,L"BUTTON",ui_tr(L"저지연 보기",L"Low latency view"),button,186);ui_child(ui_popup,L"STATIC",ui_tr(L"켜기 버튼·단축키를 누르면 전체 화면으로 들어온 화면을 바로 보여 줘요.\r\n보는 동안 녹화·방송에는 화면이 들어가지 않아요.",L"With the on button or shortcut, shows the picture in full screen as soon as it arrives.\r\nWhile shown, recording and streaming get no picture."),0,187);
+ ui_child(ui_popup,L"STATIC",ui_tr(L"저지연 보기",L"Low latency view"),0,185);ui_child(ui_popup,L"BUTTON",ui_tr(L"저지연 보기",L"Low latency view"),button,186);ui_child(ui_popup,L"STATIC",ui_tr(L"켜기 버튼·단축키를 누르면 전체 화면으로 들어온 화면을 바로 보여 줘요.\r\n보는 동안에도 녹화·방송은 그대로 이어져요.",L"With the on button or shortcut, shows the picture in full screen as soon as it arrives.\r\nRecording and streaming go on while it is shown."),0,187);
  WNDCLASSW slider={0};slider.lpfnWndProc=ui_slider_proc;slider.hInstance=module;slider.lpszClassName=L"ConsoleSmooth.Slider";slider.hCursor=LoadCursorW(NULL,(LPCWSTR)IDC_ARROW);RegisterClassW(&slider);
  ui_child(ui_popup,slider.lpszClassName,ui_tr(L"생성 버퍼",L"Generation buffer"),WS_TABSTOP,158);ui_child(ui_popup,ui_label_class(159),L"",0,159);
  ui_child(ui_popup,L"STATIC",ui_tr(L"녹화 소스",L"Recording source"),0,148);ui_child(ui_popup,L"BUTTON",ui_tr(L"원본",L"Original"),button,149);ui_child(ui_popup,L"BUTTON",ui_tr(L"생성 프레임 포함",L"With generated"),button,150);ui_child(ui_popup,ui_label_class(151),L"",0,151);

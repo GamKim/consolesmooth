@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.1 — recording and streaming fixes (2026-11-18)
+
+- Recording and streaming go on while the low latency view is shown (1.1.0 stopped them; turning the view on during a recording froze the file). Generated frames sent to recording use the HUD-protected copy.
+- "With generated" recording source: recording and streaming run at the output rate (e.g. 120 fps) from the start, so generation can be turned on or off during a recording or stream (pictures repeat while it is off). Before, the choice was fixed when the recording started.
+- Fast path (low latency view + full screen + 2x, and NVIDIA Video Frame Generation always): recordings came out empty (0 bytes) because the recording route found no original frames; fixed.
+- Fast path with 30 fps games: recordings and the Streaming Center preview had no generated frames (each 30 fps source was taken for a still picture at 120 ticks); the generated frame is now held for half a source interval. Measured in recordings (RTX 5080): Switch 2 Zelda 60 fps → 120 new pictures per second, PS5 GTA V 30 fps → 60; a local RTMP stream test (GTA V) also 30 → 60.
+- Fast path: after the low latency window closed (for example clicking another window on the same monitor), the Streaming Center preview flickered between a normal and a darker picture; generated frames now have full alpha.
+- Note: Streaming Center streams at the preview rate (e.g. 120 fps) even when the stream setting shows 60.
+
 ## 1.1.0 — low latency view, six models (2026-11-18)
 
 - Low latency view is a regular feature (no longer beta). With low latency view + full screen + Low latency + 2x, the host's GPU frames are shared with the model (no CPU copies), the made frame is shown as soon as it is ready and the original half a source interval later, straight into the full screen window (independent flip). 240 fps phone, Switch 2 Zelda, RTX 5080, delay after the passthrough: FSR 3 8.8 ms, RIFE 4.6 11.8, AMD FSR Frame Generation 12.5, NVIDIA Video Frame Generation 12.6, RIFE 4.15 lite 12.7, NVIDIA DLSS Frame Generation 19.0 (1.0.1: RIFE 4.6 83.0, FSR 3 76.7; Streaming Center preview without generation 31.9).
