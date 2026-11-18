@@ -8,6 +8,8 @@ This is a personal project, not affiliated with AVerMedia, and it contains no AV
 
 **New here? Follow the [guide](docs/GUIDE.md)** (install, first run, settings, troubleshooting).
 
+**Test results at a glance: https://gamkim.github.io/consolesmooth/** (latency and quality tables with the comparison videos, in Korean)
+
 ## What is new in 1.1.0
 
 - **Low latency view is a regular feature**: with frame generation on, the picture appears only **about 9 to 19 ms** after the original (passthrough). 1.0.1 took 77 to 87 ms (RIFE, FSR 3). It is even earlier than the default Streaming Center preview without generation (about 32 ms).
