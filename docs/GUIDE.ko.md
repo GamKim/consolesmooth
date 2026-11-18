@@ -18,9 +18,9 @@
 
 ## 2. 설치 파일 받기
 
-1. [Releases](https://github.com/GamKim/consolesmooth/releases/latest) 페이지에서 `ConsoleSmooth-Plugin-Setup-1.1.0.exe`를 받아요.
+1. [Releases](https://github.com/GamKim/consolesmooth/releases/latest) 페이지에서 `ConsoleSmooth-Plugin-Setup-1.1.1.exe`를 받아요.
 2. 서명이 없는 설치 파일이라 실행하면 Windows가 "PC 보호" 경고를 띄울 수 있어요. **추가 정보 → 실행**을 누르세요.
-   - 걱정되면 같은 페이지의 `SHA256SUMS-1.1.0.txt` 값과 받은 파일의 해시를 비교해 보세요(PowerShell: `Get-FileHash 파일이름`).
+   - 걱정되면 같은 페이지의 `SHA256SUMS-1.1.1.txt` 값과 받은 파일의 해시를 비교해 보세요(PowerShell: `Get-FileHash 파일이름`).
 
 ## 3. 설치하기
 

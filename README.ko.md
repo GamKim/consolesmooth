@@ -10,6 +10,10 @@ AVerMedia와 관계없는 개인 프로젝트이며, AVerMedia의 프로그램�
 
 **시험 결과 한눈에 보기: https://gamkim.github.io/consolesmooth/** (지연·화질 측정표와 비교 영상, 페이지 안에서 바로 재생)
 
+## 1.1.1에서 바뀐 점
+
+- **녹화·방송**: 저지연 보기를 켜도 녹화·방송이 이어지고, 녹화 소스가 "생성 프레임 포함"이면 처음부터 출력 fps로 나가서 생성을 나중에 켜도 됩니다. 빠른 방식에서 녹화 파일이 비거나 30fps 게임의 만든 프레임이 빠지던 문제를 고쳤습니다. 측정: 60fps 게임 60 → 120장, 30fps 게임 30 → 60장(녹화와 PC 안 방송 시험).
+
 ## 1.1.0에서 바뀐 점
 
 - **저지연 보기 정식 기능**: 생성을 켠 화면이 원본(패스스루)보다 **약 9\~19ms**만 늦게 나옵니다. 1.0.1은 77\~87ms였습니다(RIFE·FSR 3 기준). 생성을 끈 Streaming Center 기본 미리보기(약 32ms)보다도 빠릅니다.
@@ -52,7 +56,7 @@ AVerMedia와 관계없는 개인 프로젝트이며, AVerMedia의 프로그램�
 
 ## 설치
 
-[Releases](https://github.com/GamKim/consolesmooth/releases)에서 `ConsoleSmooth-Plugin-Setup-1.1.0.exe`를 받아 실행합니다. 서명이 없는 설치 파일이라 SmartScreen 경고가 나오면 "추가 정보 → 실행"을 누릅니다. 그림으로 보는 사용법: [docs/GUIDE.ko.md](docs/GUIDE.ko.md). 모든 설정 설명: [installer/INSTALL-README.txt](installer/INSTALL-README.txt).
+[Releases](https://github.com/GamKim/consolesmooth/releases)에서 `ConsoleSmooth-Plugin-Setup-1.1.1.exe`를 받아 실행합니다. 서명이 없는 설치 파일이라 SmartScreen 경고가 나오면 "추가 정보 → 실행"을 누릅니다. 그림으로 보는 사용법: [docs/GUIDE.ko.md](docs/GUIDE.ko.md). 모든 설정 설명: [installer/INSTALL-README.txt](installer/INSTALL-README.txt).
 
 ## 제거
 

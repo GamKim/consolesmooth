@@ -10,6 +10,10 @@ This is a personal project, not affiliated with AVerMedia, and it contains no AV
 
 **Test results at a glance: https://gamkim.github.io/consolesmooth/** (latency and quality tables with the comparison videos, in Korean)
 
+## What is new in 1.1.1
+
+- **Recording and streaming**: they go on while the low latency view is shown, and with the recording source "With generated" they run at the output rate from the start, so generation can be turned on later. Fixed empty recordings and missing generated frames in 30 fps games on the fast path. Measured: 60 fps game 60 → 120 new pictures per second, 30 fps game 30 → 60 (recording and a local stream test).
+
 ## What is new in 1.1.0
 
 - **Low latency view is a regular feature**: with frame generation on, the picture appears only **about 9 to 19 ms** after the original (passthrough). 1.0.1 took 77 to 87 ms (RIFE, FSR 3). It is even earlier than the default Streaming Center preview without generation (about 32 ms).
@@ -52,7 +56,7 @@ Score of the 60 fps made from the same 30 fps input against a real 60 fps record
 
 ## Install
 
-Download `ConsoleSmooth-Plugin-Setup-1.1.0.exe` from [Releases](https://github.com/GamKim/consolesmooth/releases) and run it. The installer is not signed; if SmartScreen warns, choose "More info → Run anyway". Illustrated guide: [docs/GUIDE.md](docs/GUIDE.md). All settings: [installer/INSTALL-README-EN.txt](installer/INSTALL-README-EN.txt).
+Download `ConsoleSmooth-Plugin-Setup-1.1.1.exe` from [Releases](https://github.com/GamKim/consolesmooth/releases) and run it. The installer is not signed; if SmartScreen warns, choose "More info → Run anyway". Illustrated guide: [docs/GUIDE.md](docs/GUIDE.md). All settings: [installer/INSTALL-README-EN.txt](installer/INSTALL-README-EN.txt).
 
 ## Uninstall
 
