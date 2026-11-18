@@ -10,9 +10,9 @@ AVerMedia와 관계없는 개인 프로젝트이며, AVerMedia의 프로그램�
 
 ## 1.1.0에서 바뀐 점
 
-- **저지연 보기 정식 기능**: 생성을 켠 화면이 원본(패스스루)보다 **약 9~19ms**만 늦게 나옵니다. 1.0.1은 77~87ms였습니다(RIFE·FSR 3 기준). 생성을 끈 Streaming Center 기본 미리보기(약 32ms)보다도 빠릅니다.
+- **저지연 보기 정식 기능**: 생성을 켠 화면이 원본(패스스루)보다 **약 9\~19ms**만 늦게 나옵니다. 1.0.1은 77\~87ms였습니다(RIFE·FSR 3 기준). 생성을 끈 Streaming Center 기본 미리보기(약 32ms)보다도 빠릅니다.
 - **모델 6개**: RIFE 4.6, RIFE 4.15 lite, FSR 3, AMD FSR 프레임 생성, NVIDIA Video Frame Generation, NVIDIA DLSS 프레임 생성.
-- **권장 설정**이 그래픽카드 속도를 재서 생성 버퍼를 15~25ms 사이에서 고릅니다.
+- **권장 설정**이 그래픽카드 속도를 재서 생성 버퍼를 15\~25ms 사이에서 고릅니다.
 
 ## 특징
 
@@ -56,7 +56,7 @@ AVerMedia와 관계없는 개인 프로젝트이며, AVerMedia의 프로그램�
 
 Streaming Center를 닫고 `Plugin\ConsoleSmooth` 폴더의 `Uninstall.exe`를 실행해 **제거**를 누릅니다(기본 위치: `C:\Program Files (x86)\AVerMedia\AVerMedia Streaming Center\Plugin\ConsoleSmooth`). Streaming Center 원본과 설정은 남습니다. 자세한 내용은 [installer/UNINSTALL-README.txt](installer/UNINSTALL-README.txt)에 있습니다.
 
-## 측정값 (RTX 5080, GC573, FHD, 2026-11-17~18)
+## 측정값 (RTX 5080, GC573, FHD, 2026-11-17\~18)
 
 ### 지연 (원본 패스스루 화면보다 늦게 나오는 시간)
 
@@ -101,14 +101,14 @@ Streaming Center를 닫고 `Plugin\ConsoleSmooth` 폴더의 `Uninstall.exe`를 �
 
 | 입력 | 설정 | 생성 비율 |
 |---|---|---|
-| 스위치 2 (60fps) | 저지연 보기 · 6개 모델 2배 → 120fps | 10초마다 600장 중 597~600장 |
+| 스위치 2 (60fps) | 저지연 보기 · 6개 모델 2배 → 120fps | 10초마다 600장 중 597\~600장 |
 | 스위치 2 (60fps) | RIFE 목표 160fps | 98% |
 | PS5 GTA5 (59.94Hz) | RIFE 2배 / RIFE 160 / FSR 3 120 | 96.4% / 91.6% / 100% |
 | 스위치 2 (RX 6600) | RIFE 2배(1/4 크기 계산) / FSR 3 | 99.8% / 98% |
 
 ## 한계
 
-- 저지연 보기의 빠른 방식은 2배일 때만 쓰입니다. 3배·4배, 목표 프레임, 30fps 보정, 안정 우선, 그래픽카드가 두 개인 노트북에서는 기존 방식(생성 버퍼 15~25ms)으로 동작합니다.
+- 저지연 보기의 빠른 방식은 2배일 때만 쓰입니다. 3배·4배, 목표 프레임, 30fps 보정, 안정 우선, 그래픽카드가 두 개인 노트북에서는 기존 방식(생성 버퍼 15\~25ms)으로 동작합니다.
 - 빠른 방식은 RTX 5080에서만 시험했습니다. 다른 그래픽카드에서 문제가 있으면 [Issues](https://github.com/GamKim/consolesmooth/issues)에 알려 주세요.
 - 아주 빠른 카메라 회전에서 배경이 조금 일렁일 수 있습니다. 30fps 게임은 고개를 갑자기 돌릴 때 얼굴이 일렁일 수 있습니다.
 - 3인칭 게임에서 캐릭터가 오래 서 있으면 화면 정보 보호가 캐릭터를 화면 정보로 볼 수 있습니다(머리카락 끝 깨짐 → 화면 정보 보호 끄기).
