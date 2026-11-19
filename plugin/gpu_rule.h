@@ -1,7 +1,10 @@
 /* SPDX-License-Identifier: MIT
  * 2.3.3: when the GPU path (gpu_probe.h / gpu_gen.h / gpu_view.h) is used, decided once when the host builds the preview
  * pipeline. Everything else stays on the CPU path (d3d11download -> engine -> d3d11upload), which supports all settings.
- *  GPU path: low latency view + full screen, low latency (not stable), exactly 2x, 30 fps smoothing off, a model with a GPU
+ *  GPU path: low latency view + full screen, low latency (not stable), exactly 2x, a model with a GPU
+ *  (2.3.11: "30 fps smoothing" no longer forces the CPU path. Since 2.3.10 the GPU path spaces a 30 fps source itself
+ *  (mid held half a source interval), and the 11-19 GTA6 run showed the CPU path with smoothing at 58-77% even spacing
+ *  against 89.5% for VFG, which was on the GPU path. The setting still applies on the CPU path.)
  *  slot (RIFE, FSR 3, NVIDIA VFG, DLSS FG, AMD FSR FG), no earlier GPU-path failure for that model on this PC, and the
  *  host's display GPU is also the high-performance GPU (hybrid laptops keep the CPU path).
  *  NVIDIA VFG keeps the GPU path whenever it is chosen (its CPU path is too slow for 120), unless it failed before.
@@ -40,7 +43,8 @@ static int gpu_rule(int model,int lowview,int display,int stable,int mode,int mu
  if(!gpu_rule_family_ok(model)||(model<32&&(failed>>model)&1))return 0;
  if(cs_models[model].family==4)return 1;
  int twice=mode?(src>0&&target==2*src):mult==2;
- return lowview&&display&&!stable&&twice&&!cadence;
+ (void)cadence;
+ return lowview&&display&&!stable&&twice;
 }
 /* Decision for this run from settings.ini (read at pipeline build). */
 static int gpu_rule_now(int model){

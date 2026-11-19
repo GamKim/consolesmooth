@@ -39,7 +39,7 @@ static void gv_wait_until(LONGLONG target){
 }
 static const IID gv_iid_device1={0xa04bfb29,0x08ef,0x43d6,{0xa4,0x9c,0xa9,0xbd,0xbd,0xcb,0xe6,0x86}}; /* ID3D11Device1 */
 static void gv_draw_label(void);
-static int gv_present(int tex){
+static int gv_present(int tex,int kind){
  int ok=0;AcquireSRWLockShared(&direct_lock);
  if(InterlockedCompareExchange(&direct_state,0,0)==2&&direct_dev){
   AcquireSRWLockShared(&gv_lock);LONG gen=gv_gen;HANDLE h=gv_nt[tex];ReleaseSRWLockShared(&gv_lock);
@@ -51,7 +51,7 @@ static int gv_present(int tex){
   if(gv_srv[tex]){
    ID3D11DeviceContext_OMSetRenderTargets(direct_ctx,1,&direct_rtv,NULL);ID3D11DeviceContext_RSSetViewports(direct_ctx,1,&direct_view);
    ID3D11DeviceContext_IASetPrimitiveTopology(direct_ctx,D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);ID3D11DeviceContext_VSSetShader(direct_ctx,direct_vs,NULL,0);
-   ID3D11DeviceContext_PSSetShader(direct_ctx,InterlockedCompareExchange(&direct_sharpen,0,0)&&direct_ps_sharp?direct_ps_sharp:direct_ps,NULL,0);
+   ID3D11DeviceContext_PSSetShader(direct_ctx,(InterlockedCompareExchange(&direct_sharpen,0,0)||(kind==1&&InterlockedCompareExchange(&gen_sharpen,0,0)))&&direct_ps_sharp?direct_ps_sharp:direct_ps,NULL,0);
    ID3D11DeviceContext_PSSetShaderResources(direct_ctx,0,1,&gv_srv[tex]);ID3D11DeviceContext_PSSetSamplers(direct_ctx,0,1,&direct_sampler);ID3D11DeviceContext_Draw(direct_ctx,3,0);
    gv_draw_label();
    ID3D11ShaderResourceView *none=NULL;ID3D11DeviceContext_PSSetShaderResources(direct_ctx,0,1,&none);
@@ -78,7 +78,7 @@ static DWORD WINAPI gv_thread_main(void *u){
   it=gv_q[take];gv_dropped+=take;memmove(gv_q,gv_q+take+1,sizeof(GvItem)*(gv_n-take-1));gv_n-=take+1;ReleaseSRWLockExclusive(&gv_lock);
   if(now.QuadPart-it.due>gv_freq/1000)++gv_late; /* more than 1 ms after due */
   {double wl=1000.0*(now.QuadPart-it.due)/gv_freq;gv_wake_late_sum+=wl;if(wl>gv_wake_late_max)gv_wake_late_max=wl;}
-  LARGE_INTEGER p0;QueryPerformanceCounter(&p0);int shown=gv_present(it.tex);{LARGE_INTEGER p1;QueryPerformanceCounter(&p1);double pm=1000.0*(p1.QuadPart-p0.QuadPart)/gv_freq;gv_pres_sum+=pm;gv_pres_n++;if(pm>gv_pres_max)gv_pres_max=pm;}
+  LARGE_INTEGER p0;QueryPerformanceCounter(&p0);int shown=gv_present(it.tex,it.kind);{LARGE_INTEGER p1;QueryPerformanceCounter(&p1);double pm=1000.0*(p1.QuadPart-p0.QuadPart)/gv_freq;gv_pres_sum+=pm;gv_pres_n++;if(pm>gv_pres_max)gv_pres_max=pm;}
   if(shown){LARGE_INTEGER t;QueryPerformanceCounter(&t);double ms=1000.0*(t.QuadPart-it.arr)/gv_freq;gv_shown[it.kind]++;gv_lat_sum[it.kind]+=ms;if(ms>gv_lat_max[it.kind])gv_lat_max[it.kind]=ms;}
   if(now.QuadPart-lastLog>gv_freq*10){lastLog=now.QuadPart;
    logline("GPU_VIEW shown_orig=%lld shown_gen=%lld arrival_to_present_orig_ms=%.2f (max %.2f) gen_ms=%.2f (max %.2f) late=%lld dropped=%lld presents=%lld skips=%lld",

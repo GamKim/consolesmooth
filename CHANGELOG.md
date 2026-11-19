@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.2 — generated frames shown briefly (2026-11-19)
+
+- Fast path (low latency view + full screen + 2x): the generated frame now stays on screen about a quarter of a source interval and the original about three quarters (30 fps game: 8.3 ms and 25 ms; before 16.7 ms each). Generated frames are softer than originals (RTX 5080, PS5 GTA VI walk: about 50-70% of the original's sharpness in every model), and showing them half the time made heads and edges look smeared and the picture flicker. Measured in desktop captures with all six models: generated 8.2-8.8 ms, original 24.6-25.5 ms, 59.9 new pictures per second (nothing dropped). New switch in the Display tab, **Show generated frames briefly** (on by default); turn it off for evenly spaced frames as in 1.1.1.
+- 30 fps smoothing no longer sends RIFE, FSR 3, AMD FSR Frame Generation and DLSS Frame Generation to the standard path; they stay on the fast path. GTA VI, 1.1.1 → 1.1.2: RIFE 4.6 GPU 52% / 106 W → 15-17% / 70 W, DLSS Frame Generation 44% / 93 W → 11-13% / 60 W.
+
 ## 1.1.1 — recording and streaming fixes (2026-11-18)
 
 - Recording and streaming go on while the low latency view is shown (1.1.0 stopped them; turning the view on during a recording froze the file). Generated frames sent to recording use the HUD-protected copy.

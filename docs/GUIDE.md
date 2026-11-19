@@ -20,9 +20,9 @@ Nothing on the console (Switch, PS5) is changed. Only the captured picture on yo
 
 ## 2. Download
 
-1. Download `ConsoleSmooth-Plugin-Setup-1.1.1.exe` from the [latest release](https://github.com/GamKim/consolesmooth/releases/latest).
+1. Download `ConsoleSmooth-Plugin-Setup-1.1.2.exe` from the [latest release](https://github.com/GamKim/consolesmooth/releases/latest).
 2. The installer isn't code-signed, so Windows may show a "Windows protected your PC" warning. Click **More info → Run anyway**.
-   - If you want to check the file, compare its hash with `SHA256SUMS-1.1.1.txt` on the same page (PowerShell: `Get-FileHash <file>`).
+   - If you want to check the file, compare its hash with `SHA256SUMS-1.1.2.txt` on the same page (PowerShell: `Get-FileHash <file>`).
 
 ## 3. Install
 
@@ -80,6 +80,7 @@ Changes in the settings window are saved with **Apply** and take effect **the ne
 | Lowest latency | Display tab → turn **Low latency view** on + full screen, 2x, then restart Streaming Center (about 9-19 ms after the original) |
 | Match a 160 Hz (or other) monitor | Frame generation tab → Output mode: **Target fps** = your refresh rate |
 | Shave latency | Frame generation tab → Display: **Full screen** (shorter than a window) |
+| Even spacing instead of less smear | Display tab → turn **Show generated frames briefly** off (on by default: generated about 8 ms, original about 25 ms) |
 | Even pacing in 30 fps games (GTA V quality mode, Bloodborne) | Advanced tab → **30fps smoothing** (about +8 ms latency, off by default) |
 | Fix broken HUD, text boxes or maps | Advanced tab → turn **HUD protection** off |
 | Record and stream the generated frames | Display · recording tab → Recording source **With generated** (you can start recording or streaming first and turn generation on later) |

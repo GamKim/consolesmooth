@@ -18,9 +18,9 @@
 
 ## 2. 설치 파일 받기
 
-1. [Releases](https://github.com/GamKim/consolesmooth/releases/latest) 페이지에서 `ConsoleSmooth-Plugin-Setup-1.1.1.exe`를 받아요.
+1. [Releases](https://github.com/GamKim/consolesmooth/releases/latest) 페이지에서 `ConsoleSmooth-Plugin-Setup-1.1.2.exe`를 받아요.
 2. 서명이 없는 설치 파일이라 실행하면 Windows가 "PC 보호" 경고를 띄울 수 있어요. **추가 정보 → 실행**을 누르세요.
-   - 걱정되면 같은 페이지의 `SHA256SUMS-1.1.1.txt` 값과 받은 파일의 해시를 비교해 보세요(PowerShell: `Get-FileHash 파일이름`).
+   - 걱정되면 같은 페이지의 `SHA256SUMS-1.1.2.txt` 값과 받은 파일의 해시를 비교해 보세요(PowerShell: `Get-FileHash 파일이름`).
 
 ## 3. 설치하기
 
@@ -77,6 +77,7 @@
 | 160Hz 같은 모니터에 맞추기 | 프레임 생성 탭 → 출력 방식: **목표 프레임**을 모니터 Hz로 |
 | 지연을 조금이라도 줄이기 | 프레임 생성 탭 → 표시 방식: **전체 화면**(창보다 짧아요) |
 | 30fps 게임(GTA5 화질 모드, 블러드본)을 고르게 | 고급 탭 → **30fps 보정**(지연 약 +8ms, 기본 끔) |
+| 머리·테두리 번짐 대신 고른 간격을 원할 때 | 표시·녹화 탭 → **만든 장 짧게 보이기** 끄기 (기본 켬: 만든 프레임 약 8ms, 원본 약 25ms) |
 | 글자 창·지도 같은 HUD가 깨져 보일 때 | 고급 탭 → **HUD 보호** 끄기 |
 | 생성 프레임까지 녹화·방송 | 표시 · 녹화 탭 → 녹화 소스 **생성 프레임 포함** (녹화·방송을 먼저 시작하고 생성은 나중에 켜도 됩니다) |
 | 켜기/끄기 단축키 바꾸기 | 고급 탭 → **켜기/끄기 단축키** |

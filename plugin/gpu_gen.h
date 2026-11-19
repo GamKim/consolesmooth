@@ -114,7 +114,8 @@ static DWORD WINAPI gg_worker(void *p){
    LONGLONG half=(LONGLONG)(g->src_ms*0.5*gv_freq/1000),gap=(LONGLONG)(g->src_ms*0.2*gv_freq/1000);
    LONGLONG mid=g->jarr+(LONGLONG)(g->lead_ms*gv_freq/1000),want=mid;if(mid<now.QuadPart)mid=now.QuadPart;
    if(g->last_due&&mid<g->last_due+gap)mid=g->last_due+gap;
-   int skipMid=mid-want>half;LONGLONG orig=skipMid?(mid>want+half?mid:want+half):mid+half;
+   LONGLONG share=(LONGLONG)(g->src_ms*0.01*InterlockedCompareExchange(&gen_share_pct,0,0)*gv_freq/1000);
+   int skipMid=mid-want>half;LONGLONG orig=skipMid?(mid>want+half?mid:want+half):mid+share;
    if(!rc&&!skipMid)gv_post(out,mid,g->jarr,1);else if(skipMid)g->gv_skips++;
    gv_post(g->jb,orig,g->jarr,0);g->last_due=orig;
   }

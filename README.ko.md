@@ -10,6 +10,11 @@ AVerMedia와 관계없는 개인 프로젝트이며, AVerMedia의 프로그램�
 
 **시험 결과 한눈에 보기: https://gamkim.github.io/consolesmooth/** (지연·화질 측정표와 비교 영상, 페이지 안에서 바로 재생)
 
+## 1.1.2에서 바뀐 점
+
+- **만든 프레임을 짧게 보여 줍니다**: 만든 프레임은 원본보다 흐려서(모든 모델에서 원본 선명도의 약 50\~70%) 절반씩 보여 주면 머리·테두리가 번지고 화면이 깜빡이는 것처럼 보였습니다. 이제 저지연 보기 + 전체 화면에서 만든 프레임은 약 8ms, 원본은 약 25ms 보입니다(30fps 게임 기준). 표시·녹화 탭 → **만든 장 짧게 보이기**(기본 켬)를 끄면 1.1.1처럼 고른 간격으로 보여 줍니다.
+- **30fps 보정을 켜도 빠른 방식을 씁니다**: RIFE·FSR 3·AMD FSR 프레임 생성·DLSS 프레임 생성이 느린 방식으로 바뀌지 않아 GPU 사용량이 크게 줄었습니다(GTA6, RIFE 4.6: GPU 52% → 15\~17%).
+
 ## 1.1.1에서 바뀐 점
 
 - **녹화·방송**: 저지연 보기를 켜도 녹화·방송이 이어지고, 녹화 소스가 "생성 프레임 포함"이면 처음부터 출력 fps로 나가서 생성을 나중에 켜도 됩니다. 빠른 방식에서 녹화 파일이 비거나 30fps 게임의 만든 프레임이 빠지던 문제를 고쳤습니다. 측정: 60fps 게임 60 → 120장, 30fps 게임 30 → 60장(녹화와 PC 안 방송 시험).
@@ -56,7 +61,7 @@ AVerMedia와 관계없는 개인 프로젝트이며, AVerMedia의 프로그램�
 
 ## 설치
 
-[Releases](https://github.com/GamKim/consolesmooth/releases)에서 `ConsoleSmooth-Plugin-Setup-1.1.1.exe`를 받아 실행합니다. 서명이 없는 설치 파일이라 SmartScreen 경고가 나오면 "추가 정보 → 실행"을 누릅니다. 그림으로 보는 사용법: [docs/GUIDE.ko.md](docs/GUIDE.ko.md). 모든 설정 설명: [installer/INSTALL-README.txt](installer/INSTALL-README.txt).
+[Releases](https://github.com/GamKim/consolesmooth/releases)에서 `ConsoleSmooth-Plugin-Setup-1.1.2.exe`를 받아 실행합니다. 서명이 없는 설치 파일이라 SmartScreen 경고가 나오면 "추가 정보 → 실행"을 누릅니다. 그림으로 보는 사용법: [docs/GUIDE.ko.md](docs/GUIDE.ko.md). 모든 설정 설명: [installer/INSTALL-README.txt](installer/INSTALL-README.txt).
 
 ## 제거
 
