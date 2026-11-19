@@ -35,6 +35,10 @@ static int ui_sharpen;static volatile LONG direct_sharpen;
 /* 2.3.12 internal test (11-19 GTA6 home): gen_share = % of a source interval the mid frame stays on screen in the
  * low-latency view (50 = even, 25 = default); gen_sharpen = sharpen mid frames only (they are ~half as sharp). */
 static volatile LONG gen_share_pct=25,gen_sharpen;static int ui_genshort=1;
+/* 2.3.13 (11-19 user): the settings window cut text off and could not be moved or resized. Height 888 -> 1000 design px;
+ * drag the title bar to move it, drag the bottom-right corner (or edges) to zoom the whole window; both remembered (ui_x, ui_y, ui_zoom). */
+static int ui_pop_moved,ui_pop_x,ui_pop_y,ui_zoom=100,ui_base_dpi=96,ui_sizing;
+#define UI_POP_H 1000
 static volatile LONG gen_hdr;static int ui_hdr; /* 2.3.13: RTX Video HDR in the full screen window (rtx_hdr.h) */
 /* 2.2.4 internal (11-14 user): display sync, full screen and window. 0 vertical sync (refresh hold, as before), 1 variable refresh
  * (present on arrival; full screen with tearing allowed so G-Sync/FreeSync can follow), 2 off (present on arrival, full screen may tear). */
@@ -160,6 +164,8 @@ static int ui_preferences(int save){
   ui_display=GetPrivateProfileIntW(L"preview",L"display_mode",0,path)==1;
   ui_show_fps=GetPrivateProfileIntW(L"preview",L"show_fps",1,path)==1;ui_fps_game=GetPrivateProfileIntW(L"preview",L"fps_game",0,path)==1;
   ui_sharpen=GetPrivateProfileIntW(L"preview",L"sharpen",0,path)==1;InterlockedExchange(&direct_sharpen,ui_sharpen);
+  ui_zoom=GetPrivateProfileIntW(L"window",L"ui_zoom",100,path);if(ui_zoom<60||ui_zoom>200)ui_zoom=100;
+  {int x=GetPrivateProfileIntW(L"window",L"ui_x",-99999,path),y=GetPrivateProfileIntW(L"window",L"ui_y",-99999,path);if(x!=-99999&&y!=-99999){ui_pop_moved=1;ui_pop_x=x;ui_pop_y=y;}}
   ui_hdr=GetPrivateProfileIntW(L"preview",L"rtx_hdr",0,path)==1;InterlockedExchange(&gen_hdr,ui_hdr);
   {ui_genshort=GetPrivateProfileIntW(L"preview",L"gen_short",1,path)!=0;int gs=GetPrivateProfileIntW(L"preview",L"gen_share",ui_genshort?25:50,path);if(gs<20)gs=20;if(gs>50)gs=50;InterlockedExchange(&gen_share_pct,gs);InterlockedExchange(&gen_sharpen,GetPrivateProfileIntW(L"preview",L"gen_sharpen",0,path)==1);}
   ui_hot_mods=GetPrivateProfileIntW(L"preview",L"hotkey_mods",MOD_CONTROL|MOD_ALT,path)&(MOD_CONTROL|MOD_ALT|MOD_SHIFT);ui_hot_vk=GetPrivateProfileIntW(L"preview",L"hotkey_vk",'F',path);if(ui_hot_vk<0||ui_hot_vk>255)ui_hot_vk='F';if(ui_hot_vk&&!(ui_hot_mods&(MOD_CONTROL|MOD_ALT)))ui_hot_mods|=MOD_CONTROL|MOD_ALT;
@@ -333,7 +339,7 @@ static void ui_layout(void){
  ui_move(ui_items[178],254,358,500,30);ui_move(ui_items[179],792,354,56,36); /* 2.0.1 sharpen */
  ui_move(ui_items[185],254,430,500,30);ui_move(ui_items[186],792,426,56,36);ui_move(ui_items[187],254,466,594,66); /* 2.2.0 beta: low latency view (+40 in 2.2.1) */
  ui_move(ui_items[190],254,562,500,30);for(int i=191;i<=193;i++)ui_move(ui_items[i],254+(i-191)*202,600,190,42);ui_move(ui_items[194],254,652,594,44); /* 2.2.4: display sync */
- ui_move(ui_items[198],254,708,500,30);ui_move(ui_items[199],792,704,56,36); /* 2.3.12 (11-19 user): short mid frame switch */
+ ui_move(ui_items[198],254,730,500,30);ui_move(ui_items[199],792,726,56,36); /* 2.3.12 (11-19 user): short mid frame switch */
  ui_move(ui_items[148],254,258,240,30);ui_move(ui_items[149],504,252,164,42);ui_move(ui_items[150],680,252,164,42);ui_move(ui_items[151],254,302,590,24); /* 2.1.1: +26 */
  ui_move(ui_items[160],254,92,160,30);ui_move(ui_items[161],420,88,56,36);ui_move(ui_items[162],540,92,180,30);ui_move(ui_items[163],792,88,56,36);ui_move(ui_items[164],254,132,262,44); /* 2.1.8: two lines for the plain-language note */ui_move(ui_items[166],540,132,308,44); /* 11-13: two lines, when to turn it off */ /* 1.7.3: one note under each switch */
  /* 1.7.8 GPU switches row (AMD tests). */
@@ -341,9 +347,9 @@ static void ui_layout(void){
  ui_move(ui_items[170],254,300,200,30);ui_move(ui_items[171],792,296,56,36);ui_move(ui_items[172],254,336,594,24); /* 1.8.1, 2.1.8: +18 */
  ui_move(ui_items[157],254,394,300,42);ui_move(ui_items[184],254,442,594,24);
  ui_move(ui_items[195],254,498,300,30);ui_move(ui_items[196],560,494,288,42);ui_move(ui_items[197],254,544,594,40); /* 2.2.4 shortcut */
- ui_move(ui_items[113],254,604,500,30);ui_move(ui_items[114],792,600,56,36);ui_move(ui_items[115],254,640,594,64); /* 2.3.13 RTX Video HDR */ /* 2.1.8 (11-11 user): what the diagnostics button does */
- ui_move(ui_items[105],232,758,634,22);ui_move(ui_items[108],232,784,634,24);
- ui_move(ui_items[174],232,824,180,42);ui_move(ui_items[143],558,824,142,42);ui_move(ui_items[112],714,824,152,42);
+ ui_move(ui_items[113],254,618,500,30);ui_move(ui_items[114],792,614,56,36);ui_move(ui_items[115],254,656,594,80); /* 2.3.13 RTX Video HDR */ /* 2.1.8 (11-11 user): what the diagnostics button does */
+ ui_move(ui_items[105],232,870,634,22);ui_move(ui_items[108],232,896,634,24); /* 2.3.13: +112 */
+ ui_move(ui_items[174],232,936,180,42);ui_move(ui_items[143],558,936,142,42);ui_move(ui_items[112],714,936,152,42);
 }
 static void ui_tab_apply(void){
  for(int id=103;id<200;id++){int t=ui_tab_of(id);if(t<0||!ui_items[id])continue;
@@ -428,7 +434,8 @@ static void ui_position(void){
  ui_position_fullscreen();
  int dpi=(int)GetDpiForWindow(ui_parent);if(!dpi)dpi=96;
  MONITORINFO monitor={.cbSize=sizeof(monitor)};GetMonitorInfoW(MonitorFromWindow(ui_parent,MONITOR_DEFAULTTONEAREST),&monitor);
- int fitX=MulDiv(monitor.rcWork.right-monitor.rcWork.left-24,96,900),fitY=MulDiv(monitor.rcWork.bottom-monitor.rcWork.top-24,96,1292);if(dpi>fitX)dpi=fitX;if(dpi>fitY)dpi=fitY;if(dpi<48)dpi=48;
+ int fitX=MulDiv(monitor.rcWork.right-monitor.rcWork.left-24,96,900),fitY=MulDiv(monitor.rcWork.bottom-monitor.rcWork.top-24,96,UI_POP_H);if(dpi>fitX)dpi=fitX;if(dpi>fitY)dpi=fitY;if(dpi<48)dpi=48;
+ ui_base_dpi=dpi;dpi=MulDiv(dpi,ui_zoom,100);{int fx2=MulDiv(monitor.rcWork.right-monitor.rcWork.left,96,900),fy2=MulDiv(monitor.rcWork.bottom-monitor.rcWork.top,96,UI_POP_H);if(dpi>fx2)dpi=fx2;if(dpi>fy2)dpi=fy2;}if(dpi<48)dpi=48;
  if(ui_dpi!=dpi){ui_dpi=dpi;ui_layout();}
  /* Toolbar geometry comes from the host's own toolbar window, so it holds at any monitor size,
   * Windows scale and window width. Units below are host toolbar units (44 per toolbar height). */
@@ -459,10 +466,10 @@ static void ui_position(void){
   if(mw<(int)(125*unit)){mw=(int)(420*unit);mx=host.preview_left+(int)(8*unit);my=host.bar.bottom+(int)(8*unit);}
   ui_place(ui_meter,HWND_TOP,mx,my,mw,b,SWP_NOACTIVATE);ui_place(ui_items[147],NULL,pad,0,mw-pad,b,SWP_NOACTIVATE|SWP_NOZORDER);
   int showMeter=ui_show_fps&&!!(ui_requested()&1);if(!!(GetWindowLongPtrW(ui_meter,GWL_STYLE)&WS_VISIBLE)!=showMeter)ShowWindow(ui_meter,showMeter?SW_SHOWNOACTIVATE:SW_HIDE);}
- if(ui_expanded){RECT host;GetWindowRect(ui_parent,&host);int w=ui_px(900),h=ui_px(888); /* 1.9.8 tabs: was 1292; 2.0.3 +72 for latency priority */int left=(host.left+host.right-w)/2,top=(host.top+host.bottom-h)/2;
+ if(ui_expanded){RECT host;GetWindowRect(ui_parent,&host);int w=ui_px(900),h=ui_px(UI_POP_H); /* 1.9.8 tabs: was 1292; 2.0.3 +72 for latency priority; 2.3.13 888 -> 1000 */int left=(host.left+host.right-w)/2,top=(host.top+host.bottom-h)/2;if(ui_pop_moved){left=ui_pop_x;top=ui_pop_y;}
   if(left+w>monitor.rcWork.right)left=monitor.rcWork.right-w;if(left<monitor.rcWork.left)left=monitor.rcWork.left;
   if(top+h>monitor.rcWork.bottom)top=monitor.rcWork.bottom-h;if(top<monitor.rcWork.top)top=monitor.rcWork.top;
-  ui_place(ui_popup,NULL,left,top,w,h,SWP_NOACTIVATE|SWP_NOZORDER);
+  if(!ui_sizing)ui_place(ui_popup,NULL,left,top,w,h,SWP_NOACTIVATE|SWP_NOZORDER);
  }
 }
 static void ui_tip_update(void){
@@ -747,7 +754,24 @@ static void ui_toggle_generation(const char *how){
  if(!on){ui_act_lowview=0;InterlockedExchange(&low_view,test_lowview);}
  logline("UI_TOGGLE enabled=%d serial=%ld qpc=%lld by=%s display=%d low_view=%d",!!(ui_requested()&1),serial,(long long)now.QuadPart,how,ui_act_display,ui_act_lowview);
 }
+static void ui_save_window(void){
+ wchar_t dir[32768],path[32768],v[16];DWORD n=GetEnvironmentVariableW(L"CS_SETTINGS_DIR",dir,32768);
+ if(!n)n=GetEnvironmentVariableW(L"CS_ENGINE_DIR",dir,32768);if(!n||n>32000)return;
+ swprintf(path,32768,L"%ls\\settings.ini",dir);
+ swprintf(v,16,L"%d",ui_zoom);WritePrivateProfileStringW(L"window",L"ui_zoom",v,path);
+ if(ui_pop_moved){swprintf(v,16,L"%d",ui_pop_x);WritePrivateProfileStringW(L"window",L"ui_x",v,path);swprintf(v,16,L"%d",ui_pop_y);WritePrivateProfileStringW(L"window",L"ui_y",v,path);}
+}
 static LRESULT CALLBACK ui_proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
+ if(window==ui_popup&&ui_popup){
+  if(message==WM_NCHITTEST){POINT pt={(short)LOWORD(lp),(short)HIWORD(lp)};RECT r;GetWindowRect(window,&r);int e=ui_px(8),c=ui_px(22);
+   if(pt.x>=r.right-c&&pt.y>=r.bottom-c)return HTBOTTOMRIGHT;if(pt.x>=r.right-e)return HTRIGHT;if(pt.y>=r.bottom-e)return HTBOTTOM;
+   if(pt.y<r.top+ui_px(64))return HTCAPTION;}
+  if(message==WM_ENTERSIZEMOVE){ui_sizing=1;return 0;}
+  if(message==WM_SIZING){RECT *r=(RECT*)lp;int w=r->right-r->left;int z=MulDiv(w,100*96,900*(ui_base_dpi?ui_base_dpi:96));if(z<60)z=60;if(z>200)z=200;
+   w=MulDiv(900*(ui_base_dpi?ui_base_dpi:96),z,100*96);r->right=r->left+w;r->bottom=r->top+MulDiv(w,UI_POP_H,900);
+   if(z!=ui_zoom){ui_zoom=z;ui_dpi=0;}return TRUE;}
+  if(message==WM_EXITSIZEMOVE){ui_sizing=0;RECT r;GetWindowRect(window,&r);ui_pop_moved=1;ui_pop_x=r.left;ui_pop_y=r.top;ui_dpi=0;ui_position();ui_save_window();InvalidateRect(window,NULL,TRUE);return 0;}
+ }
  switch(message){
  case WM_MEASUREITEM:{MEASUREITEMSTRUCT *m=(MEASUREITEMSTRUCT*)lp;if(m->CtlType==ODT_MENU){m->itemWidth=ui_px(m->itemID>=400?200:304);m->itemHeight=ui_px(42);return TRUE;}break;}
  case WM_DRAWITEM:{DRAWITEMSTRUCT* d=(DRAWITEMSTRUCT*)lp;if(d->CtlType==ODT_MENU){int item=(int)d->itemID,corner=item>=400,model=item-200,latency=item>=300&&!corner;if(!latency&&!corner&&!cs_model_valid(model))return FALSE;
@@ -830,9 +854,9 @@ static LRESULT CALLBACK ui_proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
   if(window==ui_meter)ui_fill(dc,r,UI_TOOLBAR);
   if(window==ui_popup){RECT header={0,0,r.right,ui_px(64)},side={0,ui_px(64),ui_px(210),r.bottom};ui_fill(dc,header,UI_TOOLBAR);ui_fill(dc,side,UI_TOOLBAR);
    /* 1.9.8: cards of the selected tab (top, bottom pairs in 96-dpi units). */
-   static const short cards[3][10]={{78,428,440,640,652,740,0,0,0,0},{78,236,244,336,344,408,416,540,548,708},{78,184,192,276,284,368,382,476,484,592}};
+   static const short cards[3][12]={{78,428,440,640,652,740,0,0,0,0,0,0},{78,236,244,336,344,408,416,540,548,708,716,776},{78,184,192,276,284,368,382,476,484,592,600,744}}; /* 2.3.13: own cards for the short-frame and HDR rows */
    HBRUSH b=CreateSolidBrush(UI_BG),old=SelectObject(dc,b);HGDIOBJ pen=SelectObject(dc,GetStockObject(NULL_PEN));
-   for(int i=0;i<10&&cards[ui_tab][i];i+=2)RoundRect(dc,ui_px(232),ui_px(cards[ui_tab][i]),ui_px(868),ui_px(cards[ui_tab][i+1]),ui_px(22),ui_px(22));
+   for(int i=0;i<12&&cards[ui_tab][i];i+=2)RoundRect(dc,ui_px(232),ui_px(cards[ui_tab][i]),ui_px(868),ui_px(cards[ui_tab][i+1]),ui_px(22),ui_px(22));
    SelectObject(dc,old);SelectObject(dc,pen);DeleteObject(b);
    b=CreateSolidBrush(UI_LINE);FrameRect(dc,&r,b);DeleteObject(b);
    if(ui_tab==2){RECT split={ui_px(520),ui_px(92),ui_px(520)+ui_px(1),ui_px(156)};ui_fill(dc,split,RGB(70,70,70));} /* 1.7.3: divider between the 30fps and HUD columns */

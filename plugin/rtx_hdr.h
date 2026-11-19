@@ -22,7 +22,13 @@ typedef struct {unsigned version,method;unsigned enable:1,reserved:31;} CsTrueHd
 static int hdr_on,hdr_restore_win;static LUID hdr_target_adapter;static UINT32 hdr_target_id;
 static ID3D11VideoDevice *hdr_vd;static ID3D11VideoContext *hdr_vc;static ID3D11VideoProcessorEnumerator *hdr_en;static ID3D11VideoProcessor *hdr_vp;
 static struct {ID3D11Resource *res;ID3D11VideoProcessorInputView *iv;} hdr_iv[12];static ID3D11Texture2D *hdr_cpu_tex;
+/* 2.3.13: the video processor writes an own HDR10 texture; the readout label is drawn there and the result copied to the
+ * back buffer. Drawing into the back buffer with a render target view made every later Blt fail (11-19, frozen window). */
+static ID3D11Texture2D *hdr_mid;static ID3D11RenderTargetView *hdr_mid_rtv;static ID3D11VideoProcessorOutputView *hdr_mid_ov; /* made once: after a draw into hdr_mid, creating a new output view failed with E_INVALIDARG (11-19) */
 static int hdr_out_w,hdr_out_h;
+/* readout in HDR: see gv_hdr_src_label (gpu_view.h). Tried 11-19 and dropped: a 3D draw next to the TrueHDR Blt removed the
+ * device (887a0005); the label as stream 1 of the TrueHDR Blt switched RTX Video HDR off; a second plain video processor
+ * for the label hung the first present. */
 
 /* Windows HDR ("advanced color") state of the monitor's target through the DisplayConfig API. set: -1 query only. */
 typedef struct {DISPLAYCONFIG_DEVICE_INFO_HEADER header;UINT32 value,colorEncoding,bitsPerColorChannel;} CsAdvColorInfo;
@@ -55,6 +61,7 @@ static void hdr_restore(void){
 static void hdr_release(void){
  for(int i=0;i<12;i++){if(hdr_iv[i].iv)ID3D11VideoProcessorInputView_Release(hdr_iv[i].iv);hdr_iv[i].iv=NULL;hdr_iv[i].res=NULL;}
  if(hdr_cpu_tex){ID3D11Texture2D_Release(hdr_cpu_tex);hdr_cpu_tex=NULL;}
+ if(hdr_mid_ov){ID3D11VideoProcessorOutputView_Release(hdr_mid_ov);hdr_mid_ov=NULL;}if(hdr_mid_rtv){ID3D11RenderTargetView_Release(hdr_mid_rtv);hdr_mid_rtv=NULL;}if(hdr_mid){ID3D11Texture2D_Release(hdr_mid);hdr_mid=NULL;}
  if(hdr_vp){ID3D11VideoProcessor_Release(hdr_vp);hdr_vp=NULL;}if(hdr_en){ID3D11VideoProcessorEnumerator_Release(hdr_en);hdr_en=NULL;}
  if(hdr_vc){ID3D11VideoContext_Release(hdr_vc);hdr_vc=NULL;}if(hdr_vd){ID3D11VideoDevice_Release(hdr_vd);hdr_vd=NULL;}
  hdr_on=0;hdr_restore();
@@ -62,21 +69,35 @@ static void hdr_release(void){
 static ID3D11VideoProcessorInputView *hdr_input(ID3D11Resource *res){
  for(int i=0;i<12;i++)if(hdr_iv[i].res==res&&hdr_iv[i].iv)return hdr_iv[i].iv;
  D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC d={0};d.ViewDimension=D3D11_VPIV_DIMENSION_TEXTURE2D;ID3D11VideoProcessorInputView *iv=NULL;
- if(ID3D11VideoDevice_CreateVideoProcessorInputView(hdr_vd,res,hdr_en,&d,&iv)<0)return NULL;
+ {HRESULT h=ID3D11VideoDevice_CreateVideoProcessorInputView(hdr_vd,res,hdr_en,&d,&iv);static int n;if(h<0){if(n++<5)logline("HDR_IV_FAILED hr=%08lx",(unsigned long)h);return NULL;}}
  for(int i=0;i<12;i++)if(!hdr_iv[i].iv){hdr_iv[i].res=res;hdr_iv[i].iv=iv;return iv;}
  ID3D11VideoProcessorInputView_Release(hdr_iv[0].iv);hdr_iv[0].res=res;hdr_iv[0].iv=iv;return iv;
+}
+static int hdr_blt_ov(ID3D11Resource *src,ID3D11VideoProcessorOutputView *ov){
+ ID3D11VideoProcessorInputView *iv=hdr_input(src);if(!iv)return 0;
+ D3D11_VIDEO_PROCESSOR_STREAM st[1]={{0}};st[0].Enable=TRUE;st[0].pInputSurface=iv;
+ HRESULT hr=ID3D11VideoContext_VideoProcessorBlt(hdr_vc,hdr_vp,ov,0,1,st);{static int n;if(hr<0&&n++<5)logline("HDR_BLT_FAILED hr=%08lx",(unsigned long)hr);}return hr>=0;
 }
 static int hdr_blt_to(ID3D11Resource *src,ID3D11Resource *dst){
  ID3D11VideoProcessorInputView *iv=hdr_input(src);if(!iv)return 0;
  D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC od={0};od.ViewDimension=D3D11_VPOV_DIMENSION_TEXTURE2D;ID3D11VideoProcessorOutputView *ov=NULL;
- if(ID3D11VideoDevice_CreateVideoProcessorOutputView(hdr_vd,dst,hdr_en,&od,&ov)<0)return 0;
+ {HRESULT h=ID3D11VideoDevice_CreateVideoProcessorOutputView(hdr_vd,dst,hdr_en,&od,&ov);static int n;if(h<0){if(n++<5)logline("HDR_OV_FAILED hr=%08lx",(unsigned long)h);return 0;}}
  D3D11_VIDEO_PROCESSOR_STREAM st={0};st.Enable=TRUE;st.pInputSurface=iv;
- HRESULT hr=ID3D11VideoContext_VideoProcessorBlt(hdr_vc,hdr_vp,ov,0,1,&st);ID3D11VideoProcessorOutputView_Release(ov);return hr>=0;
+ HRESULT hr=ID3D11VideoContext_VideoProcessorBlt(hdr_vc,hdr_vp,ov,0,1,&st);ID3D11VideoProcessorOutputView_Release(ov);{static int n;if(hr<0&&n++<5)logline("HDR_BLT_FAILED hr=%08lx",(unsigned long)hr);}return hr>=0;
 }
 /* Present path: process src into the current back buffer. */
 static int hdr_blt(ID3D11Resource *src){
+ if(!hdr_mid){D3D11_TEXTURE2D_DESC td={.Width=(UINT)hdr_out_w,.Height=(UINT)hdr_out_h,.MipLevels=1,.ArraySize=1,.Format=DXGI_FORMAT_R10G10B10A2_UNORM,.SampleDesc={1,0},.Usage=D3D11_USAGE_DEFAULT,.BindFlags=D3D11_BIND_RENDER_TARGET};
+  if(ID3D11Device_CreateTexture2D(direct_dev,&td,NULL,&hdr_mid)<0)return 0;if(ID3D11Device_CreateRenderTargetView(direct_dev,(ID3D11Resource*)hdr_mid,NULL,&hdr_mid_rtv)<0)return 0;
+  D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC od={0};od.ViewDimension=D3D11_VPOV_DIMENSION_TEXTURE2D;
+  HRESULT h=ID3D11VideoDevice_CreateVideoProcessorOutputView(hdr_vd,(ID3D11Resource*)hdr_mid,hdr_en,&od,&hdr_mid_ov);if(h<0){logline("HDR_OV_FAILED hr=%08lx",(unsigned long)h);return 0;}}
+ return hdr_mid_ov?hdr_blt_ov(src,hdr_mid_ov):0;
+}
+/* After hdr_blt (and any label drawn into hdr_mid_rtv): copy the HDR picture to the back buffer. */
+static int hdr_finish(void){
+ ID3D11DeviceContext_OMSetRenderTargets(direct_ctx,0,NULL,NULL);
  ID3D11Texture2D *back=NULL;if(IDXGISwapChain1_GetBuffer(direct_chain,0,&cs_iid_texture,(void**)&back)<0)return 0;
- int ok=hdr_blt_to(src,(ID3D11Resource*)back);ID3D11Texture2D_Release(back);return ok;
+ ID3D11DeviceContext_CopyResource(direct_ctx,(ID3D11Resource*)back,(ID3D11Resource*)hdr_mid);ID3D11Texture2D_Release(back);return 1;
 }
 /* After the device exists (created with video support), before the swap chain: 1 = HDR output for this window. */
 static int hdr_setup(int in_w,int in_h,int out_w,int out_h){
@@ -88,7 +109,8 @@ static int hdr_setup(int in_w,int in_h,int out_w,int out_h){
  cd.InputWidth=(UINT)in_w;cd.InputHeight=(UINT)in_h;cd.OutputFrameRate=cd.InputFrameRate;cd.OutputWidth=(UINT)out_w;cd.OutputHeight=(UINT)out_h;cd.Usage=D3D11_VIDEO_USAGE_PLAYBACK_NORMAL;
  if(ID3D11VideoDevice_CreateVideoProcessorEnumerator(hdr_vd,&cd,&hdr_en)<0||ID3D11VideoDevice_CreateVideoProcessor(hdr_vd,hdr_en,0,&hdr_vp)<0){logline("HDR_VP_FAILED");ID3D11VideoContext1_Release(vc1);hdr_release();return 0;}
  ID3D11VideoContext1_VideoProcessorSetStreamColorSpace1(vc1,hdr_vp,0,DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
- ID3D11VideoContext1_VideoProcessorSetOutputColorSpace1(vc1,hdr_vp,DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);ID3D11VideoContext1_Release(vc1);
+ ID3D11VideoContext1_VideoProcessorSetOutputColorSpace1(vc1,hdr_vp,DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
+ ID3D11VideoContext1_Release(vc1);
  UINT sup=0;HRESULT hr=ID3D11VideoContext_VideoProcessorGetStreamExtension(hdr_vc,hdr_vp,0,&cs_guid_truehdr,sizeof sup,&sup);
  if(hr<0||!sup){logline("HDR_TRUEHDR_UNSUPPORTED hr=%08lx",(unsigned long)hr);hdr_release();return 0;}
  CsTrueHdr e={4,3,1,0};hr=ID3D11VideoContext_VideoProcessorSetStreamExtension(hdr_vc,hdr_vp,0,&cs_guid_truehdr,sizeof e,&e);

@@ -223,7 +223,7 @@ static int direct_show(void){
  if(hr>=0){
   if(hdr_on){ /* 2.3.13: the dynamic upload texture cannot feed the video processor; copy it to a default one */
    if(!hdr_cpu_tex){D3D11_TEXTURE2D_DESC td;ID3D11Texture2D_GetDesc(direct_tex,&td);td.Usage=D3D11_USAGE_DEFAULT;td.CPUAccessFlags=0;td.BindFlags=D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_RENDER_TARGET;ID3D11Device_CreateTexture2D(direct_dev,&td,NULL,&hdr_cpu_tex);}
-   if(hdr_cpu_tex){ID3D11DeviceContext_CopyResource(direct_ctx,(ID3D11Resource*)hdr_cpu_tex,(ID3D11Resource*)direct_tex);hdr_blt((ID3D11Resource*)hdr_cpu_tex);}
+   if(hdr_cpu_tex){ID3D11DeviceContext_CopyResource(direct_ctx,(ID3D11Resource*)hdr_cpu_tex,(ID3D11Resource*)direct_tex);if(hdr_blt((ID3D11Resource*)hdr_cpu_tex))hdr_finish();}
   }else{
   ID3D11DeviceContext_OMSetRenderTargets(direct_ctx,1,&direct_rtv,NULL);ID3D11DeviceContext_RSSetViewports(direct_ctx,1,&direct_view);
   ID3D11DeviceContext_IASetPrimitiveTopology(direct_ctx,D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);ID3D11DeviceContext_VSSetShader(direct_ctx,direct_vs,NULL,0);ID3D11DeviceContext_PSSetShader(direct_ctx,InterlockedCompareExchange(&direct_sharpen,0,0)&&direct_ps_sharp?direct_ps_sharp:direct_ps,NULL,0);
