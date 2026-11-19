@@ -48,7 +48,13 @@ static int gv_present(int tex,int kind){
    if(ID3D11Device_QueryInterface(direct_dev,&gv_iid_device1,(void**)&d1)>=0){if(ID3D11Device1_OpenSharedResource1(d1,h,&cs_iid_texture,(void**)&t)<0)t=NULL;ID3D11Device1_Release(d1);}
    if(t){if(ID3D11Device_CreateShaderResourceView(direct_dev,(ID3D11Resource*)t,NULL,&gv_srv[tex])<0)gv_srv[tex]=NULL;ID3D11Texture2D_Release(t);}
    if(!gv_srv[tex]&&gv_fail++<5)logline("GPU_VIEW open shared texture %d failed",tex);}
-  if(gv_srv[tex]){
+  if(gv_srv[tex]&&hdr_on){ /* 2.3.13: RTX Video HDR straight into the HDR10 back buffer (no readout label: SDR white would be full PQ) */
+   ID3D11Resource *r=NULL;ID3D11ShaderResourceView_GetResource(gv_srv[tex],&r);int b=r?hdr_blt(r):0;if(r)ID3D11Resource_Release(r);
+   LONG sync=InterlockedCompareExchange(&direct_sync,0,0);
+   HRESULT hr=!b?E_FAIL:sync&&direct_tearing?IDXGISwapChain1_Present(direct_chain,0,DXGI_PRESENT_ALLOW_TEARING):IDXGISwapChain1_Present(direct_chain,1,DXGI_PRESENT_DO_NOT_WAIT);
+   if(hr==DXGI_ERROR_WAS_STILL_DRAWING){++direct_skips;hr=S_OK;}else if(hr>=0)++direct_presents;
+   ok=hr>=0;if(!ok)logline("GPU_VIEW hdr present failed hr=%08lx blt=%d",(unsigned long)hr,b);}
+  else if(gv_srv[tex]){
    ID3D11DeviceContext_OMSetRenderTargets(direct_ctx,1,&direct_rtv,NULL);ID3D11DeviceContext_RSSetViewports(direct_ctx,1,&direct_view);
    ID3D11DeviceContext_IASetPrimitiveTopology(direct_ctx,D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);ID3D11DeviceContext_VSSetShader(direct_ctx,direct_vs,NULL,0);
    ID3D11DeviceContext_PSSetShader(direct_ctx,(InterlockedCompareExchange(&direct_sharpen,0,0)||(kind==1&&InterlockedCompareExchange(&gen_sharpen,0,0)))&&direct_ps_sharp?direct_ps_sharp:direct_ps,NULL,0);

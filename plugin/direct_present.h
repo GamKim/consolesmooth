@@ -14,7 +14,7 @@
 #define COBJMACROS
 #include "ui_lang.h"
 #include <d3d11.h>
-#include <dxgi1_5.h> /* 2.2.4: IDXGIFactory5 for tearing (variable refresh / sync off) */
+#include <dxgi1_6.h> /* 2.2.4: IDXGIFactory5 for tearing (variable refresh / sync off); 2.3.13: IDXGIOutput6 for HDR */
 #define DIRECT_CLOSE_MESSAGE (WM_APP+1)
 static volatile LONG direct_mode;static int direct_forced;
 static volatile LONG direct_gpu_feed; /* 11-18 test (gpu_view.h): the GPU path presents into this window itself */
@@ -32,6 +32,7 @@ typedef HRESULT (WINAPI *CsCompile)(const void*,SIZE_T,const char*,const void*,v
 static const IID cs_iid_factory1={0x770aae78,0xf26f,0x4dba,{0xa8,0x29,0x25,0x3c,0x83,0xd1,0xb3,0x87}};
 static const IID cs_iid_factory2={0x50c83a1c,0xe072,0x4c48,{0x87,0xb0,0x36,0x30,0xfa,0x36,0xa6,0xd0}};
 static const IID cs_iid_texture={0x6f15aaf2,0xd208,0x4e89,{0x9a,0xb4,0x48,0x95,0x35,0xd3,0x4f,0x9c}};
+#include "rtx_hdr.h"
 static const IID cs_iid_factory5={0x7632e1f5,0xee65,0x4dca,{0x87,0xfd,0x84,0xcd,0x75,0xf8,0x83,0x8d}};
 static int direct_tearing; /* this swap chain was made with ALLOW_TEARING */
 static const IID cs_iid_device1={0x77db970f,0x6276,0x48ba,{0xba,0x28,0x07,0x01,0x43,0xb4,0x39,0x2c}};
@@ -89,6 +90,7 @@ static void direct_release(void){
  if(direct_hwnd)ShowWindow(direct_hwnd,SW_HIDE);
  AcquireSRWLockExclusive(&direct_lock);
  if(direct_release_hook)direct_release_hook();
+ hdr_release(); /* 2.3.13: also turns Windows HDR back off if this window turned it on */
  DIRECT_RELEASE(direct_sampler,ID3D11SamplerState_Release);DIRECT_RELEASE(direct_ps,ID3D11PixelShader_Release);DIRECT_RELEASE(direct_ps_sharp,ID3D11PixelShader_Release);DIRECT_RELEASE(direct_vs,ID3D11VertexShader_Release);
  DIRECT_RELEASE(direct_rtv,ID3D11RenderTargetView_Release);DIRECT_RELEASE(direct_srv,ID3D11ShaderResourceView_Release);DIRECT_RELEASE(direct_tex,ID3D11Texture2D_Release);
  DIRECT_RELEASE(direct_chain,IDXGISwapChain1_Release);DIRECT_RELEASE(direct_ctx,ID3D11DeviceContext_Release);DIRECT_RELEASE(direct_dev,ID3D11Device_Release);
@@ -156,13 +158,28 @@ static int direct_create(void){
  if(direct_win_w>0){sw=direct_win_w;sh=sw*9/16;wx+=200;wy+=200;}
  IDXGIFactory2 *factory=NULL;(void)cs_iid_factory1;if(make_factory(&cs_iid_factory2,(void**)&factory)<0)return 0;
  IDXGIAdapter1 *adapter=direct_adapter(mon,factory);if(!adapter){logline("DIRECT_NO_ADAPTER");return 0;}
- HRESULT hr=make_device((IDXGIAdapter*)adapter,D3D_DRIVER_TYPE_UNKNOWN,NULL,0,NULL,0,D3D11_SDK_VERSION,&direct_dev,NULL,&direct_ctx);if(hr<0){logline("DIRECT_DEVICE_FAILED hr=%08lx",(unsigned long)hr);return 0;}
+ /* 2.3.13: RTX Video HDR (rtx_hdr.h). NVIDIA only; turns Windows HDR on for this monitor if needed (back off on close). */
+ int want_hdr=InterlockedCompareExchange(&gen_hdr,0,0)&&direct_win_w<=0;
+ if(want_hdr){DXGI_ADAPTER_DESC1 ad;IDXGIAdapter1_GetDesc1(adapter,&ad);if(ad.VendorId!=0x10DE){want_hdr=0;logline("HDR_SKIPPED not_nvidia");}}
+ if(want_hdr&&!hdr_output_is_hdr(adapter,mon)){
+  int r=hdr_windows(mon,1);
+  if(r==1){hdr_restore_win=1;want_hdr=0;
+   for(int i=0;i<30&&!want_hdr;i++){Sleep(100);IDXGIFactory2 *f2=NULL;if(make_factory(&cs_iid_factory2,(void**)&f2)<0)continue;IDXGIAdapter1 *a2=direct_adapter(mon,f2);
+    if(a2){if(hdr_output_is_hdr(a2,mon)){want_hdr=1;IDXGIAdapter1_Release(adapter);adapter=a2;IDXGIFactory2_Release(factory);factory=f2;f2=NULL;}else IDXGIAdapter1_Release(a2);}
+    if(f2)IDXGIFactory2_Release(f2);}
+   if(!want_hdr){logline("HDR_WINDOWS_NOT_READY");hdr_restore();}
+  }else{want_hdr=0;logline("HDR_WINDOWS_UNAVAILABLE r=%d",r);}
+ }
+ HRESULT hr=make_device((IDXGIAdapter*)adapter,D3D_DRIVER_TYPE_UNKNOWN,NULL,want_hdr?D3D11_CREATE_DEVICE_VIDEO_SUPPORT:0,NULL,0,D3D11_SDK_VERSION,&direct_dev,NULL,&direct_ctx);if(hr<0){logline("DIRECT_DEVICE_FAILED hr=%08lx",(unsigned long)hr);return 0;}
  IDXGIDevice1 *dd=NULL;if(ID3D11Device_QueryInterface(direct_dev,&cs_iid_device1,(void**)&dd)>=0){IDXGIDevice1_SetMaximumFrameLatency(dd,1);IDXGIDevice1_Release(dd);}
  WNDCLASSW wc={.lpfnWndProc=direct_proc,.hInstance=GetModuleHandleW(NULL),.lpszClassName=L"ConsoleSmoothDirectTest"};RegisterClassW(&wc);
  direct_hwnd=CreateWindowExW(WS_EX_TOPMOST,wc.lpszClassName,L"ConsoleSmooth full screen",WS_POPUP,wx,wy,sw,sh,NULL,NULL,wc.hInstance,NULL);if(!direct_hwnd){logline("DIRECT_WINDOW_FAILED %lu",GetLastError());return 0;}
  direct_tearing=direct_tearing_check(factory);
- DXGI_SWAP_CHAIN_DESC1 desc={.Width=(UINT)sw,.Height=(UINT)sh,.Format=DXGI_FORMAT_B8G8R8A8_UNORM,.SampleDesc={1,0},.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT,.BufferCount=3,.Scaling=DXGI_SCALING_NONE,.SwapEffect=DXGI_SWAP_EFFECT_FLIP_DISCARD,.AlphaMode=DXGI_ALPHA_MODE_IGNORE,.Flags=direct_tearing?DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING:0};
+ if(want_hdr&&!hdr_setup(direct_w,direct_h,sw,sh))hdr_restore();
+ DXGI_SWAP_CHAIN_DESC1 desc={.Width=(UINT)sw,.Height=(UINT)sh,.Format=hdr_on?DXGI_FORMAT_R10G10B10A2_UNORM:DXGI_FORMAT_B8G8R8A8_UNORM,.SampleDesc={1,0},.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT,.BufferCount=3,.Scaling=DXGI_SCALING_NONE,.SwapEffect=DXGI_SWAP_EFFECT_FLIP_DISCARD,.AlphaMode=DXGI_ALPHA_MODE_IGNORE,.Flags=direct_tearing?DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING:0};
  hr=IDXGIFactory2_CreateSwapChainForHwnd(factory,(IUnknown*)direct_dev,direct_hwnd,&desc,NULL,NULL,&direct_chain);if(hr<0){logline("DIRECT_CHAIN_FAILED hr=%08lx",(unsigned long)hr);return 0;}
+ if(hdr_on){IDXGISwapChain3 *c3=NULL;HRESULT ch=E_FAIL;if(IDXGISwapChain1_QueryInterface(direct_chain,&cs_iid_swapchain3,(void**)&c3)>=0){ch=IDXGISwapChain3_SetColorSpace1(c3,DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);IDXGISwapChain3_Release(c3);}
+  logline("HDR_ON colorspace_hr=%08lx",(unsigned long)ch);if(ch<0){logline("HDR_COLORSPACE_FAILED");return 0;}}
  ID3D11Texture2D *back=NULL;if(IDXGISwapChain1_GetBuffer(direct_chain,0,&cs_iid_texture,(void**)&back)<0)return 0;
  hr=ID3D11Device_CreateRenderTargetView(direct_dev,(ID3D11Resource*)back,NULL,&direct_rtv);ID3D11Texture2D_Release(back);if(hr<0)return 0;
  D3D11_TEXTURE2D_DESC td={.Width=(UINT)direct_w,.Height=(UINT)direct_h,.MipLevels=1,.ArraySize=1,.Format=DXGI_FORMAT_B8G8R8A8_UNORM,.SampleDesc={1,0},.Usage=D3D11_USAGE_DYNAMIC,.BindFlags=D3D11_BIND_SHADER_RESOURCE,.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE};
@@ -204,9 +221,14 @@ static int direct_show(void){
  if(hr>=0){for(int y=0;y<direct_h;y++)memcpy((uint8_t*)mapped.pData+y*(size_t)mapped.RowPitch,direct_frame+y*(size_t)direct_w*4,(size_t)direct_w*4);direct_draw_label(mapped.pData,mapped.RowPitch);ID3D11DeviceContext_Unmap(direct_ctx,(ID3D11Resource*)direct_tex,0);}
  ReleaseSRWLockShared(&direct_frame_lock);
  if(hr>=0){
+  if(hdr_on){ /* 2.3.13: the dynamic upload texture cannot feed the video processor; copy it to a default one */
+   if(!hdr_cpu_tex){D3D11_TEXTURE2D_DESC td;ID3D11Texture2D_GetDesc(direct_tex,&td);td.Usage=D3D11_USAGE_DEFAULT;td.CPUAccessFlags=0;td.BindFlags=D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_RENDER_TARGET;ID3D11Device_CreateTexture2D(direct_dev,&td,NULL,&hdr_cpu_tex);}
+   if(hdr_cpu_tex){ID3D11DeviceContext_CopyResource(direct_ctx,(ID3D11Resource*)hdr_cpu_tex,(ID3D11Resource*)direct_tex);hdr_blt((ID3D11Resource*)hdr_cpu_tex);}
+  }else{
   ID3D11DeviceContext_OMSetRenderTargets(direct_ctx,1,&direct_rtv,NULL);ID3D11DeviceContext_RSSetViewports(direct_ctx,1,&direct_view);
   ID3D11DeviceContext_IASetPrimitiveTopology(direct_ctx,D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);ID3D11DeviceContext_VSSetShader(direct_ctx,direct_vs,NULL,0);ID3D11DeviceContext_PSSetShader(direct_ctx,InterlockedCompareExchange(&direct_sharpen,0,0)&&direct_ps_sharp?direct_ps_sharp:direct_ps,NULL,0);
   ID3D11DeviceContext_PSSetShaderResources(direct_ctx,0,1,&direct_srv);ID3D11DeviceContext_PSSetSamplers(direct_ctx,0,1,&direct_sampler);ID3D11DeviceContext_Draw(direct_ctx,3,0);
+  }
   /* A blocking Present keeps one frame queued for good (measured: 1.45 refreshes instead of 0.5).
    * If the previous flip is still pending, skip this frame once so the queue empties. */
   /* 2.2.4: variable refresh / sync off present at once with tearing allowed: a G-Sync/FreeSync monitor then refreshes when the frame arrives. */

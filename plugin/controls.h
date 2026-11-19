@@ -35,6 +35,7 @@ static int ui_sharpen;static volatile LONG direct_sharpen;
 /* 2.3.12 internal test (11-19 GTA6 home): gen_share = % of a source interval the mid frame stays on screen in the
  * low-latency view (50 = even, 25 = default); gen_sharpen = sharpen mid frames only (they are ~half as sharp). */
 static volatile LONG gen_share_pct=25,gen_sharpen;static int ui_genshort=1;
+static volatile LONG gen_hdr;static int ui_hdr; /* 2.3.13: RTX Video HDR in the full screen window (rtx_hdr.h) */
 /* 2.2.4 internal (11-14 user): display sync, full screen and window. 0 vertical sync (refresh hold, as before), 1 variable refresh
  * (present on arrival; full screen with tearing allowed so G-Sync/FreeSync can follow), 2 off (present on arrival, full screen may tear). */
 static int ui_sync;static volatile LONG direct_sync;static int direct_tearing_supported(void);
@@ -62,7 +63,7 @@ static HWND ui_items[200];
 static int ui_tab;
 static int ui_tab_of(int id){
  static const short t0[]={123,111,122,128,106,130,107,132,133,129,134,135,136,138,139,142,125,126,124,140,152,158,159,127,180,181,182,153,154,155,156},
-  t1[]={145,165,144,146,183,188,189,148,149,150,151,178,179,185,186,187,190,191,192,193,194,198,199},t2[]={160,161,162,163,164,166,167,168,169,170,171,172,157,184,195,196,197};
+  t1[]={145,165,144,146,183,188,189,148,149,150,151,178,179,185,186,187,190,191,192,193,194,198,199},t2[]={160,161,162,163,164,166,167,168,169,170,171,172,157,184,195,196,197,113,114,115};
  for(unsigned i=0;i<sizeof t0/sizeof t0[0];i++)if(t0[i]==id)return 0;
  for(unsigned i=0;i<sizeof t1/sizeof t1[0];i++)if(t1[i]==id)return 1;
  for(unsigned i=0;i<sizeof t2/sizeof t2[0];i++)if(t2[i]==id)return 2;
@@ -159,6 +160,7 @@ static int ui_preferences(int save){
   ui_display=GetPrivateProfileIntW(L"preview",L"display_mode",0,path)==1;
   ui_show_fps=GetPrivateProfileIntW(L"preview",L"show_fps",1,path)==1;ui_fps_game=GetPrivateProfileIntW(L"preview",L"fps_game",0,path)==1;
   ui_sharpen=GetPrivateProfileIntW(L"preview",L"sharpen",0,path)==1;InterlockedExchange(&direct_sharpen,ui_sharpen);
+  ui_hdr=GetPrivateProfileIntW(L"preview",L"rtx_hdr",0,path)==1;InterlockedExchange(&gen_hdr,ui_hdr);
   {ui_genshort=GetPrivateProfileIntW(L"preview",L"gen_short",1,path)!=0;int gs=GetPrivateProfileIntW(L"preview",L"gen_share",ui_genshort?25:50,path);if(gs<20)gs=20;if(gs>50)gs=50;InterlockedExchange(&gen_share_pct,gs);InterlockedExchange(&gen_sharpen,GetPrivateProfileIntW(L"preview",L"gen_sharpen",0,path)==1);}
   ui_hot_mods=GetPrivateProfileIntW(L"preview",L"hotkey_mods",MOD_CONTROL|MOD_ALT,path)&(MOD_CONTROL|MOD_ALT|MOD_SHIFT);ui_hot_vk=GetPrivateProfileIntW(L"preview",L"hotkey_vk",'F',path);if(ui_hot_vk<0||ui_hot_vk>255)ui_hot_vk='F';if(ui_hot_vk&&!(ui_hot_mods&(MOD_CONTROL|MOD_ALT)))ui_hot_mods|=MOD_CONTROL|MOD_ALT;
   ui_sync=GetPrivateProfileIntW(L"preview",L"sync_mode",0,path);if(ui_sync<0||ui_sync>2)ui_sync=0;InterlockedExchange(&direct_sync,ui_sync);
@@ -182,6 +184,12 @@ static void ui_save_sharpen(void){
  if(!n)n=GetEnvironmentVariableW(L"CS_ENGINE_DIR",dir,32768);if(!n||n>32000)return;
  swprintf(path,32768,L"%ls\\settings.ini",dir);if(!WritePrivateProfileStringW(L"preview",L"sharpen",ui_sharpen?L"1":L"0",path))ui_error=-2;
  logline("UI_SHARPEN enabled=%d",ui_sharpen);
+}
+static void ui_save_hdr(void){
+ wchar_t dir[32768],path[32768];DWORD n=GetEnvironmentVariableW(L"CS_SETTINGS_DIR",dir,32768);
+ if(!n)n=GetEnvironmentVariableW(L"CS_ENGINE_DIR",dir,32768);if(!n||n>32000)return;
+ swprintf(path,32768,L"%ls\\settings.ini",dir);if(!WritePrivateProfileStringW(L"preview",L"rtx_hdr",ui_hdr?L"1":L"0",path))ui_error=-2;
+ logline("UI_RTX_HDR enabled=%d",ui_hdr);
 }
 static void ui_save_genshort(void){
  wchar_t dir[32768],path[32768];DWORD n=GetEnvironmentVariableW(L"CS_SETTINGS_DIR",dir,32768);
@@ -277,7 +285,7 @@ static void ui_draw_button(DRAWITEMSTRUCT *d){
   COLORREF box=(d->itemState&ODS_SELECTED)?RGB(72,72,72):hot?UI_TOOL_HOVER:UI_TOOLBAR;ui_fill(dc,r,box);
   RECT icon=r;int inset=(r.bottom-(r.bottom*3+2)/4)/2;InflateRect(&icon,-inset,-inset);
   ui_icon(dc,icon,id==101?0:1,id==101&&(ui_requested()&1)?UI_RED:RGB(193,193,193),box);}
- else if(id==111||id==144||id==161||id==163||id==168||id==171||id==179||id==199||id==181||id==186||id==189)ui_draw_switch(dc,r,id==189?ui_fps_game:id==186?ui_lowview:id==181?ui_latency:id==179?ui_sharpen:id==199?ui_genshort:id==144?ui_show_fps:id==161?ui_cadence:id==163?ui_hudkeep:id==168?ui_gpukeep:id==171?ui_fsrfast:!!(ui_requested()&1));
+ else if(id==111||id==144||id==161||id==163||id==168||id==171||id==179||id==199||id==114||id==181||id==186||id==189)ui_draw_switch(dc,r,id==189?ui_fps_game:id==186?ui_lowview:id==181?ui_latency:id==179?ui_sharpen:id==199?ui_genshort:id==114?ui_hdr:id==144?ui_show_fps:id==161?ui_cadence:id==163?ui_hudkeep:id==168?ui_gpukeep:id==171?ui_fsrfast:!!(ui_requested()&1));
  else {RoundRect(dc,1,1,r.right-1,r.bottom-1,ui_px(7),ui_px(7));wchar_t text[96];GetWindowTextW(d->hwndItem,text,96);DrawTextW(dc,text,-1,&r,DT_CENTER|DT_VCENTER|DT_SINGLELINE);}
  /* 1.7.4: no focus rectangle - it drew a white box on the last clicked button and switch (user request; host buttons show none). */
  SelectObject(dc,oldb);SelectObject(dc,oldpen);DeleteObject(b);DeleteObject(pen);
@@ -332,7 +340,8 @@ static void ui_layout(void){
  ui_move(ui_items[167],254,208,160,30);ui_move(ui_items[168],792,204,56,36);ui_move(ui_items[169],254,244,594,24); /* 2.1.8: +18 */
  ui_move(ui_items[170],254,300,200,30);ui_move(ui_items[171],792,296,56,36);ui_move(ui_items[172],254,336,594,24); /* 1.8.1, 2.1.8: +18 */
  ui_move(ui_items[157],254,394,300,42);ui_move(ui_items[184],254,442,594,24);
- ui_move(ui_items[195],254,498,300,30);ui_move(ui_items[196],560,494,288,42);ui_move(ui_items[197],254,544,594,40); /* 2.2.4 shortcut */ /* 2.1.8 (11-11 user): what the diagnostics button does */
+ ui_move(ui_items[195],254,498,300,30);ui_move(ui_items[196],560,494,288,42);ui_move(ui_items[197],254,544,594,40); /* 2.2.4 shortcut */
+ ui_move(ui_items[113],254,604,500,30);ui_move(ui_items[114],792,600,56,36);ui_move(ui_items[115],254,640,594,64); /* 2.3.13 RTX Video HDR */ /* 2.1.8 (11-11 user): what the diagnostics button does */
  ui_move(ui_items[105],232,758,634,22);ui_move(ui_items[108],232,784,634,24);
  ui_move(ui_items[174],232,824,180,42);ui_move(ui_items[143],558,824,142,42);ui_move(ui_items[112],714,824,152,42);
 }
@@ -761,6 +770,7 @@ static LRESULT CALLBACK ui_proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
    case 165:{HMENU menu=CreatePopupMenu();for(int c=0;c<4;c++)AppendMenuW(menu,MF_OWNERDRAW,400+c,ui_corner_name(c));RECT r;GetWindowRect(ui_items[165],&r);int choice=TrackPopupMenu(menu,TPM_RETURNCMD|TPM_NONOTIFY,r.left,r.bottom,0,window,NULL);DestroyMenu(menu);
     if(choice>=400&&choice<=403){InterlockedExchange(&ui_fps_corner,choice-400);ui_save_fps();}break;}
    case 189:ui_fps_game=!ui_fps_game;ui_save_fps();break;
+   case 114:ui_hdr=!ui_hdr;InterlockedExchange(&gen_hdr,ui_hdr);ui_save_hdr();break;
    case 199:ui_genshort=!ui_genshort;InterlockedExchange(&gen_share_pct,ui_genshort?25:50);ui_save_genshort();break;
    case 179:ui_sharpen=!ui_sharpen;InterlockedExchange(&direct_sharpen,ui_sharpen);ui_save_sharpen();break;
    case 196:ui_hot_capture=1;ui_hot_register();SetFocus(ui_items[196]);break;
@@ -860,7 +870,7 @@ static DWORD WINAPI ui_main(void *unused){
  for(unsigned i=0;i<sizeof(buttons)/sizeof(buttons[0]);i++)ui_child(ui_popup,L"BUTTON",buttons[i].text,button,buttons[i].id);
  ui_child(ui_popup,L"BUTTON",ui_tr(L"프레임 표시 꺼짐",L"FPS display off"),button,144);
  ui_child(ui_popup,L"STATIC",ui_tr(L"게임 실제 프레임으로 표시",L"Show the game's real frame rate"),0,188);ui_child(ui_popup,L"BUTTON",ui_tr(L"게임 실제 프레임",L"Game frame rate"),button,189);
- ui_child(ui_popup,L"STATIC",ui_tr(L"전체 화면 선명하게 (확대·선명화)",L"Sharpen full screen (upscale)"),0,178);ui_child(ui_popup,L"BUTTON",ui_tr(L"전체 화면 선명하게",L"Sharpen full screen"),button,179);ui_child(ui_popup,L"STATIC",ui_tr(L"만든 장 짧게 보이기 (번짐 적게, 끄면 고른 간격)",L"Show generated frames briefly (less smear; off = even spacing)"),0,198);ui_child(ui_popup,L"BUTTON",ui_tr(L"만든 장 짧게 보이기",L"Show generated frames briefly"),button,199);
+ ui_child(ui_popup,L"STATIC",ui_tr(L"전체 화면 선명하게 (확대·선명화)",L"Sharpen full screen (upscale)"),0,178);ui_child(ui_popup,L"BUTTON",ui_tr(L"전체 화면 선명하게",L"Sharpen full screen"),button,179);ui_child(ui_popup,L"STATIC",ui_tr(L"RTX Video HDR (NVIDIA RTX, 전체 화면)",L"RTX Video HDR (NVIDIA RTX, full screen)"),0,113);ui_child(ui_popup,L"BUTTON",ui_tr(L"RTX Video HDR",L"RTX Video HDR"),button,114);ui_child(ui_popup,L"STATIC",ui_tr(L"전체 화면을 HDR로 보여 줍니다. NVIDIA 드라이버의 RTX Video HDR을 쓰고, 꺼져 있으면 Windows HDR을 잠깐 켰다가 닫을 때 끕니다. HDR 모니터 필요. 녹화·방송은 그대로입니다.",L"Shows the full screen in HDR with the NVIDIA driver's RTX Video HDR. Turns Windows HDR on while open if it is off. Needs an HDR monitor. Recording and streaming are unchanged."),0,115);ui_child(ui_popup,L"STATIC",ui_tr(L"만든 장 짧게 보이기 (번짐 적게, 끄면 고른 간격)",L"Show generated frames briefly (less smear; off = even spacing)"),0,198);ui_child(ui_popup,L"BUTTON",ui_tr(L"만든 장 짧게 보이기",L"Show generated frames briefly"),button,199);
  ui_child(ui_popup,L"STATIC",ui_tr(L"켜기/끄기 단축키",L"On/off shortcut"),0,195);ui_child(ui_popup,L"BUTTON",L"",button,196);ui_child(ui_popup,L"STATIC",L"",0,197);
  ui_child(ui_popup,L"STATIC",ui_tr(L"화면 동기화 (창·전체 화면)",L"Display sync (window and full screen)"),0,190);ui_child(ui_popup,L"BUTTON",ui_tr(L"수직 동기화",L"V-Sync"),button,191);ui_child(ui_popup,L"BUTTON",ui_tr(L"가변 주사율",L"Variable refresh"),button,192);ui_child(ui_popup,L"BUTTON",ui_tr(L"끔",L"Off"),button,193);
  ui_child(ui_popup,L"STATIC",ui_tr(L"가변 주사율: G-Sync·FreeSync 모니터에서 고르게 (창은 NVIDIA 창 모드 G-Sync)\r\n끔: 바로 표시해 지연이 가장 짧음 · 전체 화면은 찢어질 수 있음",L"Variable refresh: even on G-Sync/FreeSync monitors (window: NVIDIA windowed G-Sync)\r\nOff: shown at once, lowest delay · full screen may tear"),0,194);

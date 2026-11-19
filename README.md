@@ -13,6 +13,7 @@ This is a personal project, not affiliated with AVerMedia, and it contains no AV
 ## What is new in 1.1.2
 
 - **Generated frames are shown briefly**: generated frames are softer than originals (about 50-70% of the sharpness in every model), so showing them half the time made heads and edges smear and the picture flicker. With low latency view + full screen, a generated frame is now shown for about 8 ms and the original for about 25 ms (30 fps games). Display tab → **Show generated frames briefly** (on by default); turn it off for even spacing as in 1.1.1.
+- **RTX Video HDR**: Advanced tab → **RTX Video HDR** shows the full screen in HDR with the NVIDIA driver's RTX Video HDR (nothing to download). Needs an NVIDIA RTX GPU and an HDR monitor; Windows HDR is turned on only while the full screen is open if it was off. Recording and streaming are unchanged.
 - **30 fps smoothing keeps the fast path**: RIFE, FSR 3, AMD FSR Frame Generation and DLSS Frame Generation no longer fall back to the standard path, so GPU use drops a lot (GTA VI, RIFE 4.6: 52% → 15-17%).
 
 ## What is new in 1.1.1

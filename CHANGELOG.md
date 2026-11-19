@@ -1,8 +1,9 @@
 # Changelog
 
-## 1.1.2 — generated frames shown briefly (2026-11-19)
+## 1.1.2 — generated frames shown briefly, RTX Video HDR (2026-11-19)
 
 - Fast path (low latency view + full screen + 2x): the generated frame now stays on screen about a quarter of a source interval and the original about three quarters (30 fps game: 8.3 ms and 25 ms; before 16.7 ms each). Generated frames are softer than originals (RTX 5080, PS5 GTA VI walk: about 50-70% of the original's sharpness in every model), and showing them half the time made heads and edges look smeared and the picture flicker. Measured in desktop captures with all six models: generated 8.2-8.8 ms, original 24.6-25.5 ms, 59.9 new pictures per second (nothing dropped). New switch in the Display tab, **Show generated frames briefly** (on by default); turn it off for evenly spaced frames as in 1.1.1.
+- RTX Video HDR in the full screen window (Advanced tab, off by default): the NVIDIA driver's RTX Video HDR (the same driver feature video players use) turns the SDR picture into HDR10; nothing to download. NVIDIA RTX GPU and an HDR monitor needed; if Windows HDR is off it is turned on while the full screen is open and off again when it closes. Before use a white test picture is checked; if the driver does not convert it, the window stays SDR. Recording and streaming stay SDR. RTX 5080, NVIDIA Video Frame Generation: SDR white → about 650 nits, all frames shown (297 originals + 298 generated per 10 s), arrival → original on screen 11.9 ms (same as without HDR).
 - 30 fps smoothing no longer sends RIFE, FSR 3, AMD FSR Frame Generation and DLSS Frame Generation to the standard path; they stay on the fast path. GTA VI, 1.1.1 → 1.1.2: RIFE 4.6 GPU 52% / 106 W → 15-17% / 70 W, DLSS Frame Generation 44% / 93 W → 11-13% / 60 W.
 
 ## 1.1.1 — recording and streaming fixes (2026-11-18)
