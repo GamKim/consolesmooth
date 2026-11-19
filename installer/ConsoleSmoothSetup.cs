@@ -18,9 +18,9 @@ using System.Security.Cryptography.X509Certificates;
 [assembly: AssemblyTitle("ConsoleSmooth Frame Generation")]
 [assembly: AssemblyProduct("ConsoleSmooth")]
 [assembly: AssemblyDescription("Frame generation plugin for Streaming Center")]
-[assembly: AssemblyVersion("1.0.1.0")]
-[assembly: AssemblyFileVersion("1.0.1.0")]
-[assembly: AssemblyInformationalVersion("1.0.1")]
+[assembly: AssemblyVersion("1.1.2.0")]
+[assembly: AssemblyFileVersion("1.1.2.0")]
+[assembly: AssemblyInformationalVersion("1.1.2")]
 
 static class Setup {
  // 1.9.3: English unless Streaming Center runs in Korean (HKCU\Software\AVerMedia\StreamingCenter\Global AppLanguage);
@@ -32,7 +32,7 @@ static class Setup {
    if(korean==null)korean=System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName=="ko";
    english=!korean.Value;}
   return english.Value?en:ko;}
- const string ReleaseVersion="1.0.1";
+ const string ReleaseVersion="1.1.2"; /* Build-Installer.ps1 stamps $version here and in the assembly attributes */
  const string Product="ConsoleSmoothNative-"+ReleaseVersion, HostHash="CADCCC27D66F3350BC092E29BBAD88582F4110E1EDF87193342C183D3CB15CC1";
  static string Self=Assembly.GetExecutingAssembly().Location;
  static string Hash(string file){using(var sha=SHA256.Create())using(var s=File.OpenRead(file))return BitConverter.ToString(sha.ComputeHash(s)).Replace("-","");}
@@ -236,7 +236,7 @@ static class Setup {
   var sourceLabel=LabelAt(source.Length>0?source:T("공식 앱을 먼저 설치하세요.","Install the official app first."),24,91,480,42,9,Muted);appCard.Controls.Add(sourceLabel);
   var browse=ButtonAt(T("변경","Change"),520,84,90,false);browse.Height=38;appCard.Controls.Add(browse);
   var config=new CardPanel{Location=new Point(22,305),Size=new Size(634,142)};
-  config.Controls.Add(LabelAt(T("설치 구성","Components"),24,16,450,30,15,Color.White));config.Controls.Add(LabelAt(T("프레임 생성 모듈 · 모델 4종 · 라이선스","Frame generation module · 4 models · licenses"),24,55,580,28,11,Color.White));
+  config.Controls.Add(LabelAt(T("설치 구성","Components"),24,16,450,30,15,Color.White));config.Controls.Add(LabelAt(T("프레임 생성 모듈 · 모델 6종 · 라이선스","Frame generation module · 6 models · licenses"),24,55,580,28,11,Color.White));
   var destination=LabelAt(T("플러그인 위치: ","Plugin location: ")+(source.Length>0?root:T("공식 앱 선택 후 결정","Set after choosing the official app")),24,92,580,42,9,Muted);config.Controls.Add(destination);
   var status=LabelAt(T("기존 Streaming Center에 프레임 생성을 추가합니다.","Adds frame generation to your Streaming Center."),23,462,630,36,10,Muted);
   var warning=LabelAt(T("AVerMedia와 무관한 비공식 플러그인입니다.","Unofficial plugin, not affiliated with AVerMedia."),23,500,630,27,9,Muted);

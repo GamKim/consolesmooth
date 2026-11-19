@@ -28,6 +28,10 @@ $entries['LICENSE']=Join-Path $root 'LICENSE'
 foreach($license in Get-ChildItem (Join-Path $PSScriptRoot 'licenses') -File){$entries['licenses/'+$license.Name]=$license.FullName}
 $csc='C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 $code=Join-Path $PSScriptRoot 'ConsoleSmoothSetup.cs'
+# 11-19: 1.1.1/1.1.2 installers still said 1.0.1; stamp $version into a build copy of the source.
+$src=[IO.File]::ReadAllText($code)
+$src=$src -replace 'Assembly(File)?Version\("[^"]*"\)',('Assembly$1Version("'+$version+'.0")') -replace 'AssemblyInformationalVersion\("[^"]*"\)',('AssemblyInformationalVersion("'+$version+'")') -replace 'const string ReleaseVersion="[^"]*"',('const string ReleaseVersion="'+$version+'"')
+$code=Join-Path $build 'ConsoleSmoothSetup.cs';[IO.File]::WriteAllText($code,$src,(New-Object Text.UTF8Encoding $true))
 $applicationManifest=Join-Path $PSScriptRoot 'app.manifest'
 $removeManifest=Join-Path $build 'remove.sha256'
 $removeHashes=foreach($entry in $entries.GetEnumerator()){(Get-FileHash -LiteralPath $entry.Value -Algorithm SHA256).Hash+"`t"+$entry.Key}
@@ -49,6 +53,10 @@ try {
 $csc='C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 $output=Join-Path $dist ("ConsoleSmooth-Plugin-Setup-$version.exe")
 $code=Join-Path $PSScriptRoot 'ConsoleSmoothSetup.cs'
+# 11-19: 1.1.1/1.1.2 installers still said 1.0.1; stamp $version into a build copy of the source.
+$src=[IO.File]::ReadAllText($code)
+$src=$src -replace 'Assembly(File)?Version\("[^"]*"\)',('Assembly$1Version("'+$version+'.0")') -replace 'AssemblyInformationalVersion\("[^"]*"\)',('AssemblyInformationalVersion("'+$version+'")') -replace 'const string ReleaseVersion="[^"]*"',('const string ReleaseVersion="'+$version+'"')
+$code=Join-Path $build 'ConsoleSmoothSetup.cs';[IO.File]::WriteAllText($code,$src,(New-Object Text.UTF8Encoding $true))
 $applicationManifest=Join-Path $PSScriptRoot 'app.manifest'
 $hashManifest=Join-Path $build 'payload.sha256'
 Add-Type -AssemblyName System.Drawing
