@@ -118,6 +118,7 @@ td.memo { color: var(--muted); font-size: 13px; min-width: 220px; }
   <div class="why">
     <p><b>새 화면 간격(끊김 느낌)은 실제 게임으로 쟀습니다.</b> PS5에서 GTA6를 실제로 켜 두고, 리모트 플레이 매크로로 같은 카메라 동작을 반복하면서 각 프로그램이 실시간으로 만든 화면을 그대로 녹화했습니다. 프로그램마다 따로 돌렸으므로 게임 속 장면은 매번 조금씩 다릅니다.</p>
     <p><b>깨짐·잔상(화질)은 같은 입력으로 비교했습니다.</b> 게임은 매번 카메라 방향, 캐릭터 위치, 햇빛이 달라져서 실시간 녹화로는 같은 순간을 나란히 볼 수 없습니다. 그래서 PS5 화면을 캡처보드로 한 번 무손실 녹화하고, 이 원본 하나를 모든 프로그램에 넣어 같은 순간에 만든 프레임끼리 비교했습니다.</p>
+    <p><b>지연(조작 → 화면)은 이 페이지에 없습니다.</b> 프로그램별 지연은 <a href="./">젤다 시험 결과 페이지</a>에서 확인할 수 있습니다. 닌텐도 스위치 2 젤다로 휴대폰 240fps 촬영해 잰 결과로, ConsoleSmooth 1.1.0은 원본보다 8.8~19.0ms, Lossless Scaling은 36.8~61.5ms 늦게 나왔습니다.</p>
   </div>
 </section>
 
@@ -215,9 +216,7 @@ td.memo { color: var(--muted); font-size: 13px; min-width: 220px; }
     <figure><a href="gta6/face-99.jpg" target="_blank" rel="noopener"><img src="gta6/face-99.jpg" alt="얼굴 확대 비교" loading="lazy"></a><figcaption>얼굴 확대(99초). FSR 3과 FSR 3.1은 모자 둘레에 블록·점, DLSS 프레임 생성(ConsoleSmooth·Veyra 모두)은 하늘에 같은 얼룩.</figcaption></figure>
     <figure><a href="gta6/face-20.jpg" target="_blank" rel="noopener"><img src="gta6/face-20.jpg" alt="얼굴 확대 비교 2" loading="lazy"></a><figcaption>얼굴 확대(20.6초, 가장 빠른 회전).</figcaption></figure>
     <figure><a href="gta6/hud.jpg" target="_blank" rel="noopener"><img src="gta6/hud.jpg" alt="화면 정보 글자 비교" loading="lazy"></a><figcaption>화면 정보(돈) 확대, 8개 순간. 위에서부터 원본, ConsoleSmooth 6개, Veyra 4개.</figcaption></figure>
-    <figure><a href="gta6/prompt-61.jpg" target="_blank" rel="noopener"><img src="gta6/prompt-61.jpg" alt="버튼 글자 비교" loading="lazy"></a><figcaption>버튼 안내 글자(61초). AMD FSR 프레임 생성과 FSR 3은 글자가 깨지고, RIFE 4.6은 두 겹.</figcaption></figure>
-    <figure><a href="gta6/ls-zoom.jpg" target="_blank" rel="noopener"><img src="gta6/ls-zoom.jpg" alt="Lossless Scaling 만든 프레임 확대" loading="lazy"></a><figcaption>Lossless Scaling 인게임 녹화 확대. 위: LLCV 앞 원본 · 만든 프레임(물방울 모양 일그러짐과 점). 아래: 뒤 원본 · OBS 만든 프레임(난간이 물결처럼 휨).</figcaption></figure>
-  </div>
+    <figure><a href="gta6/prompt-61.jpg" target="_blank" rel="noopener"><img src="gta6/prompt-61.jpg" alt="버튼 글자 비교" loading="lazy"></a><figcaption>버튼 안내 글자(61초). AMD FSR 프레임 생성과 FSR 3은 글자가 깨지고, RIFE 4.6은 두 겹.</figcaption></figure>  </div>
 </section>
 
 <section>
@@ -225,7 +224,7 @@ td.memo { color: var(--muted); font-size: 13px; min-width: 220px; }
   <ul>
     <li>1차 결과입니다. 깨짐·잔상은 고른 8개 순간을 눈으로 본 판별이며, 30fps 게임이라 정답 60fps 화면이 없어 점수(dB)는 내지 않았습니다.</li>
     <li>새 화면 간격은 화면 녹화의 시각으로 쟀습니다. 모니터에 실제로 표시된 시각(PresentMon)으로는 아직 확인하지 않았습니다.</li>
-    <li>지연(조작 → 화면)은 이번에 재지 않았습니다. 젤다 지연 결과는 <a href="./">시험 결과 페이지</a>에 있습니다.</li>
+    <li>지연(조작 → 화면)은 GTA6로 재지 않았습니다. 지연 결과는 <a href="./">젤다 시험 결과 페이지</a>에서 확인할 수 있습니다.</li>
     <li>보트·걷기 장면은 프로그램마다 따로 실행해서 게임 속 장면이 조금씩 다릅니다. 같은 순간 비교는 위의 같은 입력 판별을 보세요.</li>
     <li>측정 PC: NVIDIA GeForce RTX 5080, AVerMedia Live Gamer 4K GC573, 1920×1080, PS5 GTA6 스토리 모드. 각 프로그램 기본 설정(Lossless Scaling LSFG 3.1 2배, Veyra 2배).</li>
   </ul>
