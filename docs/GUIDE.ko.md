@@ -18,9 +18,9 @@
 
 ## 2. 설치 파일 받기
 
-1. [Releases](https://github.com/GamKim/consolesmooth/releases/latest) 페이지에서 `ConsoleSmooth-Plugin-Setup-1.1.2.exe`를 받아요.
+1. [Releases](https://github.com/GamKim/consolesmooth/releases/latest) 페이지에서 `ConsoleSmooth-Plugin-Setup-1.1.3.exe`를 받아요.
 2. 서명이 없는 설치 파일이라 실행하면 Windows가 "PC 보호" 경고를 띄울 수 있어요. **추가 정보 → 실행**을 누르세요.
-   - 걱정되면 같은 페이지의 `SHA256SUMS-1.1.2.txt` 값과 받은 파일의 해시를 비교해 보세요(PowerShell: `Get-FileHash 파일이름`).
+   - 걱정되면 같은 페이지의 `SHA256SUMS-1.1.3.txt` 값과 받은 파일의 해시를 비교해 보세요(PowerShell: `Get-FileHash 파일이름`).
 
 ## 3. 설치하기
 
@@ -93,7 +93,8 @@
 4. 끝낼 때는 Esc(전체 화면을 닫고 생성 끄기) → Streaming Center에서 녹화·방송 멈추기.
 
 - 생성이 꺼진 동안은 같은 장면이 두 번씩 들어갑니다. 생성을 켜면 그때부터 만든 프레임이 들어갑니다.
-- 1초에 들어가는 새 화면 = 게임 fps × 배수. 60fps 게임 2배 → 120장, 30fps 게임(GTA5 등) 2배 → 60장.
+- 1초에 들어가는 새 화면 = 게임 fps × 배수. 60fps 게임 2배 → 120장, 30fps 게임(GTA5 등) 2배 → 60장, 4배 → 120장.
+- 3배·4배를 빠른 방식(저지연 보기 + 전체 화면)으로 쓰려면 NVIDIA VFG나 RIFE를 고르세요. FSR 3·DLSS 프레임 생성·AMD FSR 프레임 생성의 3배·4배는 보통 방식이라 지연이 조금 깁니다.
 - Streaming Center는 방송 설정의 주사율(60)과 상관없이 미리보기와 같은 fps(예: 120fps)로 방송을 내보냅니다. 방송하기 전에 방송 사이트가 120fps를 받는지 확인하세요.
 
 ## 문제 해결

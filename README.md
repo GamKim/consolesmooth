@@ -10,6 +10,11 @@ This is a personal project, not affiliated with AVerMedia, and it contains no AV
 
 **Test results at a glance: https://gamkim.github.io/consolesmooth/** (latency and quality tables with the comparison videos, in Korean)
 
+## What is new in 1.1.3
+
+- **3x/4x with NVIDIA Video Frame Generation and RIFE**: NVIDIA Video Frame Generation always uses the fast path, which made only one picture between originals, so 3x/4x gave 2x. The fast path now makes 2 (3x) or 3 (4x) pictures for NVIDIA Video Frame Generation, RIFE 4.6 and RIFE 4.15 lite, in the low latency view and in recording/streaming. 30 fps game at 4x = 120 new pictures per second (RTX 5080, no drops).
+- FSR 3, DLSS Frame Generation and AMD FSR Frame Generation stay 2x on the fast path; 3x/4x use the standard path as before.
+
 ## What is new in 1.1.2
 
 - **Generated frames are shown briefly**: generated frames are softer than originals (about 50-70% of the sharpness in every model), so showing them half the time made heads and edges smear and the picture flicker. With low latency view + full screen, a generated frame is now shown for about 8 ms and the original for about 25 ms (30 fps games). Display tab → **Show generated frames briefly** (on by default); turn it off for even spacing as in 1.1.1.
@@ -62,7 +67,7 @@ Score of the 60 fps made from the same 30 fps input against a real 60 fps record
 
 ## Install
 
-Download `ConsoleSmooth-Plugin-Setup-1.1.2.exe` from [Releases](https://github.com/GamKim/consolesmooth/releases) and run it. The installer is not signed; if SmartScreen warns, choose "More info → Run anyway". Illustrated guide: [docs/GUIDE.md](docs/GUIDE.md). All settings: [installer/INSTALL-README-EN.txt](installer/INSTALL-README-EN.txt).
+Download `ConsoleSmooth-Plugin-Setup-1.1.3.exe` from [Releases](https://github.com/GamKim/consolesmooth/releases) and run it. The installer is not signed; if SmartScreen warns, choose "More info → Run anyway". Illustrated guide: [docs/GUIDE.md](docs/GUIDE.md). All settings: [installer/INSTALL-README-EN.txt](installer/INSTALL-README-EN.txt).
 
 ## Uninstall
 

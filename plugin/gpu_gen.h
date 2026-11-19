@@ -65,6 +65,10 @@ typedef struct {
  /* result */ volatile LONG ready_out; volatile LONG64 ready_pair; int out_next;
  unsigned long long ticks,gen,repeat,skipped,blocked,fail,news; double ms[3]; unsigned msn;
  void *bin; char pipe[64]; int pipe_state; ID3D11Texture2D *fp; uint32_t fpv[512];
+ /* 1.1.3 (11-20 user: 3x/4x did nothing with VFG): 3x/4x on the GPU path for RIFE and NVIDIA VFG (engines that take a
+  * time position). The engine still writes one frame at a time into out 3/4; each one is HUD-composed or copied into
+  * tex 7+3*set+i (set alternates per pair) and shown in order. 2x keeps the code path below unchanged. */
+ int jm,jset,mset; volatile LONG ready_m,ready_set; int mh_set,mh_n,mh_org; LONGLONG mh_base;
  GpuAlpha alpha; GpuHud hud; int hud_on; int since_new, caught, was_on; int hold_src,hold_org; LONGLONG hold_until; /* 2.3.10: mid frame held for half a source interval */ uint32_t fps[3][512]; unsigned long long cuts,catchups,composed,offticks;
 } GpuGen;
 static int gpu_gen_init(void){
@@ -87,6 +91,11 @@ static int gpu_gen_init(void){
   int ok=gg_seq_create&&gg_ctx_import&&gg_ctx_generate&&gg_ctx_destroy&&gg_error;logline("GPU_GEN seq family=%d init ok=%d",gpu_gen_family,ok);return ok;}
  int ok=gpu_gen_vfg?(gg_vfg_create&&gg_ctx_import&&gg_ctx_generate&&gg_ctx_destroy&&gg_error):(gg_create&&gg_destroy&&gg_ctx_create&&gg_ctx_import&&gg_ctx_generate&&gg_ctx_destroy&&gg_error);logline("GPU_GEN init ok=%d",ok);return ok;
 }
+/* pictures per source on the GPU path: 2, or 3/4 for families that take a time position (RIFE 0, VFG 4) */
+static int gg_mult(void){
+ int m=auto_mode?(auto_sn>0&&auto_sd>0&&(long long)auto_target*auto_sd%auto_sn==0?(int)((long long)auto_target*auto_sd/auto_sn):2):auto_mult;
+ if(m<2||m>4)m=2;if(m>2&&!(gpu_gen_vfg||gpu_gen_family==0))m=2;return m;
+}
 static void gg_wait_query(GpuGen *g,ID3D11Query *q){
  ID3D11DeviceContext *ctx=NULL;g->o.g.dev->lpVtbl->GetImmediateContext(g->o.g.dev,&ctx);BOOL done=FALSE;
  for(;;){gp_lock(g->o.g.gdev);HRESULT r=ctx->lpVtbl->GetData(ctx,(ID3D11Asynchronous*)q,&done,sizeof done,0);gp_unlock(g->o.g.gdev);if(r==S_OK&&done)break;SwitchToThread();}
@@ -97,9 +106,31 @@ static DWORD WINAPI gg_worker(void *p){
  while(WaitForSingleObject(g->wake,INFINITE)==WAIT_OBJECT_0&&!g->stop){
   if(!g->busy)continue;
   gg_wait_query(g,g->q[g->ja]);gg_wait_query(g,g->q[g->jb]);
+  if(g->jm>2){ /* 3x/4x: m-1 frames at i/m, each kept in tex 7+3*set+(i-1), shown as soon as it is ready */
+   int m=g->jm,base=7+3*g->jset,made=0,gvon=g->gv&&InterlockedCompareExchange(&direct_gpu_feed,0,0);LONGLONG first=0,step=0;int skipMid=0;
+   for(int i=1;i<m;i++){
+    double ms[3]={0};int rc=gg_ctx_generate(g->ctx,g->ja,g->jaid,g->jb,g->jbid,3+g->jout,(float)i/(float)m,ms);
+    if(rc){g->fail++;if(g->fail<5)logline("GPU_GEN generate rc=%d %s",rc,gg_error());if(g->fail==120&&g->gen<g->fail){logline("GPU_GEN failing, CPU path next start");gpu_rule_mark_failed(gpu_gen_model);}break;}
+    ga_fix(&g->alpha,g->o.g.dev,g->o.g.gdev,g->jout);for(int k=0;k<3;k++)g->ms[k]+=ms[k];g->msn++;
+    ID3D11DeviceContext *ctx=NULL;g->o.g.dev->lpVtbl->GetImmediateContext(g->o.g.dev,&ctx);gp_lock(g->o.g.gdev);
+    ID3D11Resource *dst=(ID3D11Resource*)g->tex[base+i-1];
+    if(!(g->hud_on&&gh_compose(&g->hud,ctx,g->o.g.dev,dst,0,3+g->jout,g->jb)))ctx->lpVtbl->CopyResource(ctx,dst,(ID3D11Resource*)g->tex[3+g->jout]);else g->composed++;
+    ctx->lpVtbl->End(ctx,(ID3D11Asynchronous*)g->hq);ctx->lpVtbl->Flush(ctx);gp_unlock(g->o.g.gdev);ctx->lpVtbl->Release(ctx);gg_wait_query(g,g->hq);made=i;
+    if(gvon){LARGE_INTEGER now;QueryPerformanceCounter(&now);
+     if(i==1){double gen=1000.0*(now.QuadPart-g->jarr)/gv_freq;g->lead_ms=0.9*g->lead_ms+0.1*(gen+0.5);if(g->lead_ms<1)g->lead_ms=1;if(g->lead_ms>10)g->lead_ms=10;
+      LONGLONG half=(LONGLONG)(g->src_ms*0.5*gv_freq/1000),gap=(LONGLONG)(g->src_ms*0.2*gv_freq/1000);
+      first=g->jarr+(LONGLONG)(g->lead_ms*gv_freq/1000);LONGLONG want=first;if(first<now.QuadPart)first=now.QuadPart;if(g->last_due&&first<g->last_due+gap)first=g->last_due+gap;
+      /* each generated picture: share/50 of an even step (short frames on: half a step) */
+      step=(LONGLONG)(g->src_ms/m*InterlockedCompareExchange(&gen_share_pct,0,0)/50.0*gv_freq/1000);skipMid=first-want>half;}
+     if(!skipMid)gv_post(base+i-1,first+step*(i-1),g->jarr,1);}
+   }
+   if(made){InterlockedExchange(&g->ready_set,g->jset);InterlockedExchange(&g->ready_m,made);InterlockedExchange64(&g->ready_pair,(LONG64)g->jbid);}
+   if(gvon){LONGLONG orig=first?first+step*(m-1):g->jarr+(LONGLONG)((g->lead_ms+g->src_ms*0.5)*gv_freq/1000);if(skipMid)g->gv_skips++;gv_post(g->jb,orig,g->jarr,0);g->last_due=orig;}
+   InterlockedExchange(&g->busy,0);continue;
+  }
   double ms[3]={0};int rc=gg_ctx_generate(g->ctx,g->ja,g->jaid,g->jb,g->jbid,3+g->jout,0.5f,ms);
   if(rc){g->fail++;if(g->fail<5)logline("GPU_GEN generate rc=%d %s",rc,gg_error());if(g->fail==120&&g->gen<g->fail){logline("GPU_GEN failing, CPU path next start");gpu_rule_mark_failed(gpu_gen_model);}}
-  else{ga_fix(&g->alpha,g->o.g.dev,g->o.g.gdev,g->jout);for(int i=0;i<3;i++)g->ms[i]+=ms[i];g->msn++;InterlockedExchange(&g->ready_out,g->jout);InterlockedExchange64(&g->ready_pair,(LONG64)g->jbid);}
+  else{ga_fix(&g->alpha,g->o.g.dev,g->o.g.gdev,g->jout);for(int i=0;i<3;i++)g->ms[i]+=ms[i];g->msn++;InterlockedExchange(&g->ready_m,0);InterlockedExchange(&g->ready_out,g->jout);InterlockedExchange64(&g->ready_pair,(LONG64)g->jbid);}
   if(g->gv&&InterlockedCompareExchange(&direct_gpu_feed,0,0)){
    int out=3+g->jout;
    if(!rc&&g->hud_on){ID3D11DeviceContext *ctx=NULL;g->o.g.dev->lpVtbl->GetImmediateContext(g->o.g.dev,&ctx);int k=5+g->hk;g->hk^=1;
@@ -156,7 +187,7 @@ static int gg_setup(GpuGen *g,void *pad,ID3D11Resource *res,void *gdev){
  {g->gv=gpu_view_wanted();gv_switch=g->gv;g->src_ms=1000.0/60;g->lead_ms=4;p->dev->lpVtbl->CreateQuery(p->dev,&qd,&g->hq);if(g->gv)logline("GPU_VIEW test on");}
  g->wake=CreateEventW(NULL,FALSE,FALSE,NULL);g->thread=CreateThread(NULL,0,gg_worker,g,0,NULL);
  g->cur=g->prev=-1;g->ready_out=-1;g->hold_src=-1;
- logline("GPU_GEN setup %ux%u model=%ls hud=%d",d.Width,d.Height,gpu_gen_vfg?L"NVIDIA VFG (internal GPU path)":cs_models[mi].label,g->hud_on);(void)gdev;return 1;
+ logline("GPU_GEN setup %ux%u x%d model=%ls hud=%d",d.Width,d.Height,gg_mult(),gpu_gen_vfg?L"NVIDIA VFG (internal GPU path)":cs_models[mi].label,g->hud_on);(void)gdev;return 1;
 }
 static int gpu_gen_buffer(void *pad,void *info,void *data){
  GpuGen *g=data;GpuOut *o=&g->o;GpuProbe *p=&o->g;void *in=probe_buffer(info);if(!in||gp_n_memory(in)<1)return 1;
@@ -177,7 +208,7 @@ static int gpu_gen_buffer(void *pad,void *info,void *data){
   if(other)return 1;
  }
  {int on=!!((ui_requested()|frame_force_on)&1);
-  if(!on){InterlockedExchange(&gpu_gen_running,0);if(g->gv)gv_end();if(g->was_on){while(g->busy)SwitchToThread();g->cur=g->prev=-1;g->since_new=0;g->caught=0;g->hold_src=-1;InterlockedExchange(&g->ready_out,-1);InterlockedExchange64(&g->ready_pair,0);logline("GPU_GEN off (passthrough)");}
+  if(!on){InterlockedExchange(&gpu_gen_running,0);if(g->gv)gv_end();if(g->was_on){while(g->busy)SwitchToThread();g->cur=g->prev=-1;g->since_new=0;g->caught=0;g->hold_src=-1;InterlockedExchange(&g->ready_out,-1);InterlockedExchange64(&g->ready_pair,0);InterlockedExchange(&g->ready_m,0);g->mh_n=0;logline("GPU_GEN off (passthrough)");}
    g->was_on=0;g->offticks++;return 1;}
   if(!g->was_on){g->was_on=1;logline("GPU_GEN on");}InterlockedExchange(&gpu_gen_running,1);}
  LARGE_INTEGER t0,t1;QueryPerformanceCounter(&t0);
@@ -210,16 +241,19 @@ static int gpu_gen_buffer(void *pad,void *info,void *data){
    * source interval for each pair. P/C = previous/current before this source. */
   int P=g->prev,C=g->cur;
   if(g->caught){src=C>=0?C:slot;g->caught=0;g->repeat++;} /* already showed C during the still scene: do not step back to mid(P,C) */
+  else if(P>=0&&C>=0&&InterlockedCompareExchange64(&g->ready_pair,0,0)==(LONG64)g->id[C]&&InterlockedCompareExchange(&g->ready_m,0,0)>0){ /* 3x/4x set ready */
+   g->mh_set=InterlockedCompareExchange(&g->ready_set,0,0);g->mh_n=InterlockedCompareExchange(&g->ready_m,0,0);g->mh_org=C;g->mh_base=t0.QuadPart;src=7+3*g->mh_set;org=-1;g->gen++;}
   else if(P>=0&&C>=0&&InterlockedCompareExchange64(&g->ready_pair,0,0)==(LONG64)g->id[C]){src=3+InterlockedCompareExchange(&g->ready_out,0,0);org=C;g->gen++;}
   else if(P>=0){src=P;g->repeat++;}else src=C>=0?C:slot;
   g->since_new=0;
   /* 2.3.10 (11-18 GTA5 30 fps, 120 ticks): keep the mid frame on screen for half a source interval, then the original, so a
    * 30 fps source gives mid,mid,orig,orig. 60 fps at 120 ticks stays mid,orig (the half interval minus 2 ms ends before tick 2). */
-  if(src>=3){g->hold_src=src;g->hold_org=org;g->hold_until=t0.QuadPart+(LONGLONG)((g->src_ms*0.5-2.0)*p->freq.QuadPart/1000);}else g->hold_src=-1;
+  if(src>=7){g->hold_src=-1;} /* 3x/4x: stepped below */
+  else if(src>=3){g->mh_n=0;g->hold_src=src;g->hold_org=org;g->hold_until=t0.QuadPart+(LONGLONG)((g->src_ms*0.5-2.0)*p->freq.QuadPart/1000);}else{g->hold_src=-1;g->mh_n=0;}
   g->prev=C;g->cur=slot;g->id[slot]=++g->next_id;
   if(g->prev>=0){
-   if(cut){InterlockedExchange64(&g->ready_pair,0);if(gvact){gv_post(g->cur,t0.QuadPart,t0.QuadPart,0);g->last_due=t0.QuadPart;}} /* no mid frame across a cut */
-   else if(!g->busy){g->jarr=t0.QuadPart;g->ja=g->prev;g->jaid=g->id[g->prev];g->jb=g->cur;g->jbid=g->id[g->cur];g->jout=g->out_next;g->out_next^=1;
+   if(cut){InterlockedExchange64(&g->ready_pair,0);InterlockedExchange(&g->ready_m,0);g->mh_n=0;if(gvact){gv_post(g->cur,t0.QuadPart,t0.QuadPart,0);g->last_due=t0.QuadPart;}} /* no mid frame across a cut */
+   else if(!g->busy){g->jarr=t0.QuadPart;g->ja=g->prev;g->jaid=g->id[g->prev];g->jb=g->cur;g->jbid=g->id[g->cur];g->jout=g->out_next;g->out_next^=1;g->jm=gg_mult();g->jset=g->mset;g->mset^=1;
     InterlockedExchange(&g->busy,1);SetEvent(g->wake);}
    else{g->skipped++;if(gvact){LONGLONG d=t0.QuadPart+(LONGLONG)((g->lead_ms+g->src_ms*0.5)*p->freq.QuadPart/1000);gv_post(g->cur,d,t0.QuadPart,0);g->last_due=d;}}
   }
@@ -229,7 +263,9 @@ static int gpu_gen_buffer(void *pad,void *info,void *data){
   /* 2.3.10: still scene by time (no new source for 1.5 source intervals), not by tick count: at 120 ticks a 30 fps source
    * repeats 3 ticks and was taken for a still scene every time, so the host output (recording, preview) had no mid frames. */
   double since=g->last_arr?1000.0*(t0.QuadPart-g->last_arr)/p->freq.QuadPart:1e9;
-  if(g->hold_src>=0&&t0.QuadPart<g->hold_until){src=g->hold_src;org=g->hold_org;}
+  if(g->mh_n>0){int m=g->mh_n+1;double el=1000.0*(t0.QuadPart-g->mh_base)/p->freq.QuadPart;int k=(int)(el/(g->src_ms/m)+0.25);
+   if(k<g->mh_n){src=7+3*g->mh_set+k;org=-1;}else{g->mh_n=0;src=g->prev>=0?g->prev:g->cur;}}
+  else if(g->hold_src>=0&&t0.QuadPart<g->hold_until){src=g->hold_src;org=g->hold_org;}
   else if(since>g->src_ms*1.5&&g->cur>=0){src=g->cur;if(!g->caught){g->caught=1;g->catchups++;}} /* still scene: catch up to the newest source */
   else src=g->prev>=0?g->prev:g->cur;
   if(!(g->hold_src>=0&&t0.QuadPart<g->hold_until))g->hold_src=-1;

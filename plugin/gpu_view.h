@@ -7,7 +7,7 @@
  *  - presents go out as soon as they are due; an overdue present is replaced by a newer due one (no queue).
  * Logs GPU_VIEW lines (arrival -> present for mid and original, late, dropped).
  */
-#define GV_TEX 7
+#define GV_TEX 13 /* 0-2 inputs, 3-4 engine out, 5-6 view HUD out, 7-12 3x/4x frames (2 sets of 3, gpu_gen.h) */
 static int gv_switch;                         /* CS_TEST_GPU_VIEW=1 */
 static SRWLOCK gv_lock=SRWLOCK_INIT;
 typedef struct {int tex;LONGLONG due,arr;int kind;} GvItem; /* kind 0 original, 1 generated */

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.3 — 3x and 4x with NVIDIA Video Frame Generation and RIFE (2026-11-20)
+
+- NVIDIA Video Frame Generation always uses the fast path, which made only the midpoint: choosing 3x or 4x still gave 2x (the settings window showed the higher rate). The fast path now makes 2 (3x) or 3 (4x) pictures per source at 1/3, 2/3 or 1/4, 1/2, 3/4 for NVIDIA Video Frame Generation, RIFE 4.6 and RIFE 4.15 lite, each with HUD protection, shown in order in the low latency view and in the Streaming Center output (recording, streaming). RIFE 3x/4x used the standard path before and now stays on the fast path.
+- FSR 3, DLSS Frame Generation and AMD FSR Frame Generation make only the midpoint on the fast path; at 3x/4x they use the standard path as before.
+- Measured (RTX 5080, PS5 GTA VI, 30 fps game, 10 s): NVIDIA Video Frame Generation 4x 299 originals + 897 generated (120 new pictures per second), 0 dropped, original on screen 16.0 ms after arrival (2x: 11.8 ms); with RTX Video HDR the same. RIFE 4.6 4x: 297 + 870, about 3% of generated pictures dropped as late; RIFE 4.15 lite 4x: 297 + 859, about 4%. 2x unchanged (NVIDIA Video Frame Generation, RIFE 4.6, DLSS Frame Generation: no drops).
+- With "Show generated frames briefly" on, each generated picture stays half an even step (4x on a 30 fps game: about 4 ms each, original about 21 ms); off = even spacing.
+
 ## 1.1.2 — generated frames shown briefly, RTX Video HDR (2026-11-19)
 
 - Fast path (low latency view + full screen + 2x): the generated frame now stays on screen about a quarter of a source interval and the original about three quarters (30 fps game: 8.3 ms and 25 ms; before 16.7 ms each). Generated frames are softer than originals (RTX 5080, PS5 GTA VI walk: about 50-70% of the original's sharpness in every model), and showing them half the time made heads and edges look smeared and the picture flicker. Measured in desktop captures with all six models: generated 8.2-8.8 ms, original 24.6-25.5 ms, 59.9 new pictures per second (nothing dropped). New switch in the Display tab, **Show generated frames briefly** (on by default); turn it off for evenly spaced frames as in 1.1.1.

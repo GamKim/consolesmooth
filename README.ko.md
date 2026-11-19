@@ -10,6 +10,11 @@ AVerMedia와 관계없는 개인 프로젝트이며, AVerMedia의 프로그램�
 
 **시험 결과 한눈에 보기: https://gamkim.github.io/consolesmooth/** (지연·화질 측정표와 비교 영상, 페이지 안에서 바로 재생)
 
+## 1.1.3에서 바뀐 점
+
+- **NVIDIA VFG·RIFE 3배·4배**: VFG는 늘 빠른 방식을 쓰는데, 이 방식이 원본 사이에 한 장만 만들어서 3배·4배를 골라도 2배로 나왔습니다. 이제 빠른 방식에서도 원본 사이에 2장(3배)·3장(4배)을 만듭니다(NVIDIA VFG, RIFE 4.6, RIFE 4.15 lite). 저지연 보기와 녹화·방송 모두 적용됩니다. 30fps 게임 4배 = 1초에 새 화면 120장(RTX 5080, VFG, 빠진 장 0).
+- FSR 3·DLSS 프레임 생성·AMD FSR 프레임 생성은 빠른 방식이 2배만 되므로, 3배·4배는 지금처럼 보통 방식으로 동작합니다.
+
 ## 1.1.2에서 바뀐 점
 
 - **만든 프레임을 짧게 보여 줍니다**: 만든 프레임은 원본보다 흐려서(모든 모델에서 원본 선명도의 약 50\~70%) 절반씩 보여 주면 머리·테두리가 번지고 화면이 깜빡이는 것처럼 보였습니다. 이제 저지연 보기 + 전체 화면에서 만든 프레임은 약 8ms, 원본은 약 25ms 보입니다(30fps 게임 기준). 표시·녹화 탭 → **만든 장 짧게 보이기**(기본 켬)를 끄면 1.1.1처럼 고른 간격으로 보여 줍니다.
@@ -62,7 +67,7 @@ AVerMedia와 관계없는 개인 프로젝트이며, AVerMedia의 프로그램�
 
 ## 설치
 
-[Releases](https://github.com/GamKim/consolesmooth/releases)에서 `ConsoleSmooth-Plugin-Setup-1.1.2.exe`를 받아 실행합니다. 서명이 없는 설치 파일이라 SmartScreen 경고가 나오면 "추가 정보 → 실행"을 누릅니다. 그림으로 보는 사용법: [docs/GUIDE.ko.md](docs/GUIDE.ko.md). 모든 설정 설명: [installer/INSTALL-README.txt](installer/INSTALL-README.txt).
+[Releases](https://github.com/GamKim/consolesmooth/releases)에서 `ConsoleSmooth-Plugin-Setup-1.1.3.exe`를 받아 실행합니다. 서명이 없는 설치 파일이라 SmartScreen 경고가 나오면 "추가 정보 → 실행"을 누릅니다. 그림으로 보는 사용법: [docs/GUIDE.ko.md](docs/GUIDE.ko.md). 모든 설정 설명: [installer/INSTALL-README.txt](installer/INSTALL-README.txt).
 
 ## 제거
 

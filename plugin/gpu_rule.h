@@ -42,7 +42,9 @@ static int gpu_rule_family_ok(int model){if(!cs_model_valid(model))return 0;int 
 static int gpu_rule(int model,int lowview,int display,int stable,int mode,int mult,int target,int src,int cadence,unsigned failed){
  if(!gpu_rule_family_ok(model)||(model<32&&(failed>>model)&1))return 0;
  if(cs_models[model].family==4)return 1;
- int twice=mode?(src>0&&target==2*src):mult==2;
+ /* 1.1.3: RIFE (family 0) also 3x/4x on the GPU path (time position); FSR 3 / DLSS FG / AMD FG stay 2x here */
+ int m=mode?(src>0&&target%src==0?target/src:0):mult;
+ int twice=cs_models[model].family==0?(m>=2&&m<=4):m==2;
  (void)cadence;
  return lowview&&display&&!stable&&twice;
 }
