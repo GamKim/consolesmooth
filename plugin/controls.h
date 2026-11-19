@@ -67,7 +67,7 @@ static HWND ui_items[200];
 static int ui_tab;
 static int ui_tab_of(int id){
  static const short t0[]={123,111,122,128,106,130,107,132,133,129,134,135,136,138,139,142,125,126,124,140,152,158,159,127,180,181,182,153,154,155,156},
-  t1[]={145,165,144,146,183,188,189,148,149,150,151,178,179,185,186,187,190,191,192,193,194,198,199},t2[]={160,161,162,163,164,166,167,168,169,170,171,172,157,184,195,196,197,113,114,115};
+  t1[]={145,165,144,146,183,188,189,148,149,150,151,178,179,185,186,187,190,191,192,193,194,198,199,116},t2[]={160,161,162,163,164,166,167,168,169,170,171,172,157,184,195,196,197,113,114,115};
  for(unsigned i=0;i<sizeof t0/sizeof t0[0];i++)if(t0[i]==id)return 0;
  for(unsigned i=0;i<sizeof t1/sizeof t1[0];i++)if(t1[i]==id)return 1;
  for(unsigned i=0;i<sizeof t2/sizeof t2[0];i++)if(t2[i]==id)return 2;
@@ -316,7 +316,7 @@ static void ui_layout(void){
  ui_small=CreateFontW(-ui_px(14),0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Malgun Gothic");
  ui_heading=CreateFontW(-ui_px(22),0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Malgun Gothic");
  ui_latin=CreateFontW(-ui_px(18),0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,ui_font_path[0]?L"Noto Sans":L"Segoe UI");
- for(int i=0;i<200;i++)if(ui_items[i]&&i!=147)SendMessageW(ui_items[i],WM_SETFONT,(WPARAM)((i==120||i==123||i==124||i==145)?ui_heading:(i==105||i==108||i==125||i==126||i==127||i==146||i==151||i==156||i==164||i==166||i==169||i==172||i==182||i==183||i==184||i==194||i==197)?ui_small:ui_font),TRUE);
+ for(int i=0;i<200;i++)if(ui_items[i]&&i!=147)SendMessageW(ui_items[i],WM_SETFONT,(WPARAM)((i==120||i==123||i==124||i==145)?ui_heading:(i==105||i==108||i==125||i==126||i==127||i==146||i==151||i==156||i==164||i==166||i==169||i==172||i==182||i==183||i==184||i==194||i==197||i==115||i==116||i==187)?ui_small:ui_font),TRUE);
  if(ui_tip)SendMessageW(ui_tip,WM_SETFONT,(WPARAM)ui_font,TRUE);
  if(old)DeleteObject(old);if(small)DeleteObject(small);if(heading)DeleteObject(heading);if(latin)DeleteObject(latin);
  ui_move(ui_items[120],24,18,500,34);for(int i=0;i<3;i++)ui_move(ui_items[175+i],1,74+52*i,208,52);
@@ -337,17 +337,17 @@ static void ui_layout(void){
  ui_move(ui_items[146],254,124,590,40);ui_move(ui_items[183],254,168,590,24); /* 2.1.1 (11-11 user): what the readout numbers mean */
  ui_move(ui_items[188],254,202,500,30);ui_move(ui_items[189],792,198,56,36); /* 1.0.1 (11-13 user): game frame rate switch; rows below +40 */
  ui_move(ui_items[178],254,358,500,30);ui_move(ui_items[179],792,354,56,36); /* 2.0.1 sharpen */
- ui_move(ui_items[185],254,430,500,30);ui_move(ui_items[186],792,426,56,36);ui_move(ui_items[187],254,466,594,66); /* 2.2.0 beta: low latency view (+40 in 2.2.1) */
- ui_move(ui_items[190],254,562,500,30);for(int i=191;i<=193;i++)ui_move(ui_items[i],254+(i-191)*202,600,190,42);ui_move(ui_items[194],254,652,594,44); /* 2.2.4: display sync */
- ui_move(ui_items[198],254,730,500,30);ui_move(ui_items[199],792,726,56,36); /* 2.3.12 (11-19 user): short mid frame switch */
+ ui_move(ui_items[185],254,430,500,30);ui_move(ui_items[186],792,426,56,36);ui_move(ui_items[187],254,466,594,44); /* 2.2.0 beta: low latency view (+40 in 2.2.1) */
+ ui_move(ui_items[190],254,542,500,30);for(int i=191;i<=193;i++)ui_move(ui_items[i],254+(i-191)*202,580,190,42);ui_move(ui_items[194],254,632,594,44); /* 2.2.4: display sync */
+ ui_move(ui_items[198],254,710,500,30);ui_move(ui_items[199],792,706,56,36);ui_move(ui_items[116],254,746,594,24); /* 2.3.12 (11-19 user): short mid frame switch */
  ui_move(ui_items[148],254,258,240,30);ui_move(ui_items[149],504,252,164,42);ui_move(ui_items[150],680,252,164,42);ui_move(ui_items[151],254,302,590,24); /* 2.1.1: +26 */
  ui_move(ui_items[160],254,92,160,30);ui_move(ui_items[161],420,88,56,36);ui_move(ui_items[162],540,92,180,30);ui_move(ui_items[163],792,88,56,36);ui_move(ui_items[164],254,132,262,44); /* 2.1.8: two lines for the plain-language note */ui_move(ui_items[166],540,132,308,44); /* 11-13: two lines, when to turn it off */ /* 1.7.3: one note under each switch */
  /* 1.7.8 GPU switches row (AMD tests). */
  ui_move(ui_items[167],254,208,160,30);ui_move(ui_items[168],792,204,56,36);ui_move(ui_items[169],254,244,594,24); /* 2.1.8: +18 */
  ui_move(ui_items[170],254,300,200,30);ui_move(ui_items[171],792,296,56,36);ui_move(ui_items[172],254,336,594,24); /* 1.8.1, 2.1.8: +18 */
- ui_move(ui_items[157],254,394,300,42);ui_move(ui_items[184],254,442,594,24);
- ui_move(ui_items[195],254,498,300,30);ui_move(ui_items[196],560,494,288,42);ui_move(ui_items[197],254,544,594,40); /* 2.2.4 shortcut */
- ui_move(ui_items[113],254,618,500,30);ui_move(ui_items[114],792,614,56,36);ui_move(ui_items[115],254,656,594,80); /* 2.3.13 RTX Video HDR */ /* 2.1.8 (11-11 user): what the diagnostics button does */
+ ui_move(ui_items[157],254,508,300,42);ui_move(ui_items[184],254,556,594,24);
+ ui_move(ui_items[195],254,612,300,30);ui_move(ui_items[196],560,608,288,42);ui_move(ui_items[197],254,658,594,40); /* 2.2.4 shortcut */
+ ui_move(ui_items[113],254,396,500,30);ui_move(ui_items[114],792,392,56,36);ui_move(ui_items[115],254,432,594,44); /* 2.3.13 RTX Video HDR */ /* 2.1.8 (11-11 user): what the diagnostics button does */
  ui_move(ui_items[105],232,870,634,22);ui_move(ui_items[108],232,896,634,24); /* 2.3.13: +112 */
  ui_move(ui_items[174],232,936,180,42);ui_move(ui_items[143],558,936,142,42);ui_move(ui_items[112],714,936,152,42);
 }
@@ -848,13 +848,13 @@ static LRESULT CALLBACK ui_proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
  case WM_HOTKEY:if(window==ui_panel&&wp==1){logline("UI_HOTKEY_PRESSED");SendMessageW(ui_panel,WM_COMMAND,MAKEWPARAM(101,BN_CLICKED),0);}return 0;
  case WM_TIMER:if(!IsWindow(ui_parent)){DestroyWindow(ui_panel);return 0;}ui_refresh();return 0;
  case WM_CTLCOLOREDIT:SetTextColor((HDC)wp,UI_TEXT);SetBkColor((HDC)wp,UI_HOVER);return (LRESULT)ui_field_brush;
- case WM_CTLCOLORSTATIC:{int id=GetDlgCtrlID((HWND)lp);COLORREF bg=id==120||id==147?UI_TOOLBAR:id==121?UI_BUTTON:id==105||id==108?RGB(38,38,38):UI_BG;SetTextColor((HDC)wp,id==105||id==108||id==125||id==126||id==127||id==146||id==151||id==156||id==164||id==166||id==183||id==184||id==194||id==197?UI_MUTED:UI_TEXT);SetBkColor((HDC)wp,bg);return (LRESULT)(id==120||id==147?ui_head_brush:id==121?ui_nav_brush:id==105||id==108?ui_main_brush:ui_brush);}
+ case WM_CTLCOLORSTATIC:{int id=GetDlgCtrlID((HWND)lp);COLORREF bg=id==120||id==147?UI_TOOLBAR:id==121?UI_BUTTON:id==105||id==108?RGB(38,38,38):UI_BG;SetTextColor((HDC)wp,id==105||id==108||id==125||id==126||id==127||id==146||id==151||id==156||id==164||id==166||id==183||id==184||id==194||id==197||id==115||id==116||id==187?UI_MUTED:UI_TEXT);SetBkColor((HDC)wp,bg);return (LRESULT)(id==120||id==147?ui_head_brush:id==121?ui_nav_brush:id==105||id==108?ui_main_brush:ui_brush);}
  case WM_ERASEBKGND:return 1;
  case WM_PAINT:{PAINTSTRUCT p;HDC dc=BeginPaint(window,&p);RECT r;GetClientRect(window,&r);ui_fill(dc,r,window==ui_panel?UI_TOOLBAR:RGB(38,38,38));
   if(window==ui_meter)ui_fill(dc,r,UI_TOOLBAR);
   if(window==ui_popup){RECT header={0,0,r.right,ui_px(64)},side={0,ui_px(64),ui_px(210),r.bottom};ui_fill(dc,header,UI_TOOLBAR);ui_fill(dc,side,UI_TOOLBAR);
    /* 1.9.8: cards of the selected tab (top, bottom pairs in 96-dpi units). */
-   static const short cards[3][12]={{78,428,440,640,652,740,0,0,0,0,0,0},{78,236,244,336,344,408,416,540,548,708,716,776},{78,184,192,276,284,368,382,476,484,592,600,744}}; /* 2.3.13: own cards for the short-frame and HDR rows */
+   static const short cards[3][12]={{78,428,440,640,652,740,0,0,0,0,0,0},{78,236,244,336,344,408,416,520,528,688,696,782},{78,184,192,276,284,368,382,488,496,590,598,706}}; /* 2.3.13: own cards for the short-frame and HDR rows */
    HBRUSH b=CreateSolidBrush(UI_BG),old=SelectObject(dc,b);HGDIOBJ pen=SelectObject(dc,GetStockObject(NULL_PEN));
    for(int i=0;i<12&&cards[ui_tab][i];i+=2)RoundRect(dc,ui_px(232),ui_px(cards[ui_tab][i]),ui_px(868),ui_px(cards[ui_tab][i+1]),ui_px(22),ui_px(22));
    SelectObject(dc,old);SelectObject(dc,pen);DeleteObject(b);
@@ -894,7 +894,7 @@ static DWORD WINAPI ui_main(void *unused){
  for(unsigned i=0;i<sizeof(buttons)/sizeof(buttons[0]);i++)ui_child(ui_popup,L"BUTTON",buttons[i].text,button,buttons[i].id);
  ui_child(ui_popup,L"BUTTON",ui_tr(L"프레임 표시 꺼짐",L"FPS display off"),button,144);
  ui_child(ui_popup,L"STATIC",ui_tr(L"게임 실제 프레임으로 표시",L"Show the game's real frame rate"),0,188);ui_child(ui_popup,L"BUTTON",ui_tr(L"게임 실제 프레임",L"Game frame rate"),button,189);
- ui_child(ui_popup,L"STATIC",ui_tr(L"전체 화면 선명하게 (확대·선명화)",L"Sharpen full screen (upscale)"),0,178);ui_child(ui_popup,L"BUTTON",ui_tr(L"전체 화면 선명하게",L"Sharpen full screen"),button,179);ui_child(ui_popup,L"STATIC",ui_tr(L"RTX Video HDR (NVIDIA RTX, 전체 화면)",L"RTX Video HDR (NVIDIA RTX, full screen)"),0,113);ui_child(ui_popup,L"BUTTON",ui_tr(L"RTX Video HDR",L"RTX Video HDR"),button,114);ui_child(ui_popup,L"STATIC",ui_tr(L"전체 화면을 HDR로 보여 줍니다. NVIDIA 드라이버의 RTX Video HDR을 쓰고, 꺼져 있으면 Windows HDR을 잠깐 켰다가 닫을 때 끕니다. HDR 모니터 필요. 녹화·방송은 그대로입니다.",L"Shows the full screen in HDR with the NVIDIA driver's RTX Video HDR. Turns Windows HDR on while open if it is off. Needs an HDR monitor. Recording and streaming are unchanged."),0,115);ui_child(ui_popup,L"STATIC",ui_tr(L"만든 장 짧게 보이기 (번짐 적게, 끄면 고른 간격)",L"Show generated frames briefly (less smear; off = even spacing)"),0,198);ui_child(ui_popup,L"BUTTON",ui_tr(L"만든 장 짧게 보이기",L"Show generated frames briefly"),button,199);
+ ui_child(ui_popup,L"STATIC",ui_tr(L"전체 화면 선명하게 (확대·선명화)",L"Sharpen full screen (upscale)"),0,178);ui_child(ui_popup,L"BUTTON",ui_tr(L"전체 화면 선명하게",L"Sharpen full screen"),button,179);ui_child(ui_popup,L"STATIC",ui_tr(L"RTX Video HDR (NVIDIA RTX, 전체 화면)",L"RTX Video HDR (NVIDIA RTX, full screen)"),0,113);ui_child(ui_popup,L"BUTTON",ui_tr(L"RTX Video HDR",L"RTX Video HDR"),button,114);ui_child(ui_popup,L"STATIC",ui_tr(L"NVIDIA 드라이버의 RTX Video HDR로 전체 화면을 HDR로 보여 줌 · HDR 모니터 필요\r\nWindows HDR이 꺼져 있으면 보는 동안만 켬 · 녹화·방송은 그대로",L"Full screen in HDR with the NVIDIA driver's RTX Video HDR · needs an HDR monitor\r\nWindows HDR is turned on only while it is open · recording and streaming unchanged"),0,115);ui_child(ui_popup,L"STATIC",ui_tr(L"만든 장 짧게 보이기",L"Show generated frames briefly"),0,198);ui_child(ui_popup,L"STATIC",ui_tr(L"만든 장은 약 8ms만 보여 번짐이 덜 보임 · 끄면 고른 간격 (1.1.1 방식)",L"Generated frames shown about 8 ms: less smear · off = even spacing (as in 1.1.1)"),0,116);ui_child(ui_popup,L"BUTTON",ui_tr(L"만든 장 짧게 보이기",L"Show generated frames briefly"),button,199);
  ui_child(ui_popup,L"STATIC",ui_tr(L"켜기/끄기 단축키",L"On/off shortcut"),0,195);ui_child(ui_popup,L"BUTTON",L"",button,196);ui_child(ui_popup,L"STATIC",L"",0,197);
  ui_child(ui_popup,L"STATIC",ui_tr(L"화면 동기화 (창·전체 화면)",L"Display sync (window and full screen)"),0,190);ui_child(ui_popup,L"BUTTON",ui_tr(L"수직 동기화",L"V-Sync"),button,191);ui_child(ui_popup,L"BUTTON",ui_tr(L"가변 주사율",L"Variable refresh"),button,192);ui_child(ui_popup,L"BUTTON",ui_tr(L"끔",L"Off"),button,193);
  ui_child(ui_popup,L"STATIC",ui_tr(L"가변 주사율: G-Sync·FreeSync 모니터에서 고르게 (창은 NVIDIA 창 모드 G-Sync)\r\n끔: 바로 표시해 지연이 가장 짧음 · 전체 화면은 찢어질 수 있음",L"Variable refresh: even on G-Sync/FreeSync monitors (window: NVIDIA windowed G-Sync)\r\nOff: shown at once, lowest delay · full screen may tear"),0,194);
