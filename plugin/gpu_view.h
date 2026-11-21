@@ -90,7 +90,9 @@ static DWORD WINAPI gv_thread_main(void *u){
   if(now.QuadPart-it.due>gv_freq/1000)++gv_late; /* more than 1 ms after due */
   {double wl=1000.0*(now.QuadPart-it.due)/gv_freq;gv_wake_late_sum+=wl;if(wl>gv_wake_late_max)gv_wake_late_max=wl;}
   LARGE_INTEGER p0;QueryPerformanceCounter(&p0);int shown=gv_present(it.tex,it.kind);{LARGE_INTEGER p1;QueryPerformanceCounter(&p1);double pm=1000.0*(p1.QuadPart-p0.QuadPart)/gv_freq;gv_pres_sum+=pm;gv_pres_n++;if(pm>gv_pres_max)gv_pres_max=pm;}
-  if(shown){LARGE_INTEGER t;QueryPerformanceCounter(&t);double ms=1000.0*(t.QuadPart-it.arr)/gv_freq;gv_shown[it.kind]++;gv_lat_sum[it.kind]+=ms;if(ms>gv_lat_max[it.kind])gv_lat_max[it.kind]=ms;}
+  if(shown){LARGE_INTEGER t;QueryPerformanceCounter(&t);double ms=1000.0*(t.QuadPart-it.arr)/gv_freq;gv_shown[it.kind]++;gv_lat_sum[it.kind]+=ms;if(ms>gv_lat_max[it.kind])gv_lat_max[it.kind]=ms;
+   if(it.kind==0){static double us;static int un;static LONGLONG ut;us+=ms;un++;if(!ut)ut=t.QuadPart; /* 2 s average for the settings window */
+    if(t.QuadPart-ut>gv_freq*2){InterlockedExchange(&cs_lat_x10,(LONG)(us/un*10+0.5));InterlockedExchange64(&cs_lat_at,(LONG64)GetTickCount64());us=0;un=0;ut=t.QuadPart;}}}
   if(now.QuadPart-lastLog>gv_freq*10){lastLog=now.QuadPart;
    logline("GPU_VIEW shown_orig=%lld shown_gen=%lld arrival_to_present_orig_ms=%.2f (max %.2f) gen_ms=%.2f (max %.2f) late=%lld dropped=%lld presents=%lld skips=%lld",
     gv_shown[0],gv_shown[1],gv_shown[0]?gv_lat_sum[0]/gv_shown[0]:0,gv_lat_max[0],gv_shown[1]?gv_lat_sum[1]/gv_shown[1]:0,gv_lat_max[1],gv_late,gv_dropped,(long long)direct_presents,(long long)direct_skips);

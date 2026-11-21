@@ -5,7 +5,7 @@ $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 $build=Join-Path $root 'build\installer'
 $dist=Join-Path $root 'dist'
-$version='1.1.3'
+$version='1.1.4'
 # 11-19: the settings window title shows CS_PLUGIN_VERSION (1.1.1 shipped still saying 1.1.0); keep it equal to $version.
 $pv=(Select-String -LiteralPath (Join-Path $root 'plugin\diagnostics.h') -Pattern '#define CS_PLUGIN_VERSION "([^"]+)"').Matches[0].Groups[1].Value
 if($pv -ne $version){throw "plugin\diagnostics.h CS_PLUGIN_VERSION is $pv, installer is $version"}

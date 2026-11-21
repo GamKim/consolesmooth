@@ -10,6 +10,16 @@ AVerMedia와 관계없는 개인 프로젝트이며, AVerMedia의 프로그램�
 
 **시험 결과 한눈에 보기: https://gamkim.github.io/consolesmooth/** (지연·화질 측정표와 비교 영상, 페이지 안에서 바로 재생)
 
+## 1.1.4에서 바뀐 점
+
+- **전체 화면을 고르면 저지연 보기가 자동으로 켜져요.** 게임할 때 전체 화면만 고르면 가장 빠른 방식으로 동작합니다(창을 고르면 저지연 보기도 꺼져요).
+- **다른 프로그램 창을 눌러도 전체 화면이 닫히지 않아요.** 다른 모니터의 창을 쓰는 동안에는 그대로 맨 앞에 있고, 같은 모니터의 창을 누르거나 Alt+Tab 하면 잠시 뒤로 물러났다가 다시 누르면 돌아옵니다.
+- **설정 창 맨 아래 상태 줄에 지연이 나와요:** `켜짐 · 빠른 방식 · 원본→화면 X ms`(프로그램 안에서 잰 값).
+- 프레임 생성 엔진이 시작하지 못하면 그 이유를 진단 정보와 권장 설정 실패 화면에 보여 줍니다. 문제가 있으면 고급 탭의 진단 정보 내보내기 파일을 [Issues](https://github.com/GamKim/consolesmooth/issues)에 올려 주세요.
+- 그래픽카드를 처음에 열지 못하면, 다른 프로그램의 Vulkan 오버레이(RivaTuner, Overwolf, Steam, Discord, ReShade 등)를 끈 채로 한 번 더 시도합니다. 진단 정보에는 Windows 빌드·참가자 프로그램 여부, 그래픽 드라이버 버전, 설치된 Vulkan 오버레이 목록이 함께 들어갑니다.
+- 5분 시작 안내(한국어·영어·중국어·일본어): [docs/QUICK-START.ko.md](docs/QUICK-START.ko.md) · 측정 방법: [docs/MEASUREMENT.ko.md](docs/MEASUREMENT.ko.md)
+- 지연은 1.1.3과 같습니다(패스스루와 함께 240fps로 찍어 비교, 차이 4ms 이내).
+
 ## 1.1.3에서 바뀐 점
 
 - **NVIDIA VFG·RIFE 3배·4배**: VFG는 늘 빠른 방식을 쓰는데, 이 방식이 원본 사이에 한 장만 만들어서 3배·4배를 골라도 2배로 나왔습니다. 이제 빠른 방식에서도 원본 사이에 2장(3배)·3장(4배)을 만듭니다(NVIDIA VFG, RIFE 4.6, RIFE 4.15 lite). 저지연 보기와 녹화·방송 모두 적용됩니다. 30fps 게임 4배 = 1초에 새 화면 120장(RTX 5080, VFG, 빠진 장 0).
@@ -67,7 +77,7 @@ AVerMedia와 관계없는 개인 프로젝트이며, AVerMedia의 프로그램�
 
 ## 설치
 
-[Releases](https://github.com/GamKim/consolesmooth/releases)에서 `ConsoleSmooth-Plugin-Setup-1.1.3.exe`를 받아 실행합니다. 서명이 없는 설치 파일이라 SmartScreen 경고가 나오면 "추가 정보 → 실행"을 누릅니다. 그림으로 보는 사용법: [docs/GUIDE.ko.md](docs/GUIDE.ko.md). 모든 설정 설명: [installer/INSTALL-README.txt](installer/INSTALL-README.txt).
+[Releases](https://github.com/GamKim/consolesmooth/releases)에서 `ConsoleSmooth-Plugin-Setup-1.1.4.exe`를 받아 실행합니다. 서명이 없는 설치 파일이라 SmartScreen 경고가 나오면 "추가 정보 → 실행"을 누릅니다. 그림으로 보는 사용법: [docs/GUIDE.ko.md](docs/GUIDE.ko.md). 모든 설정 설명: [installer/INSTALL-README.txt](installer/INSTALL-README.txt).
 
 ## 제거
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.4 — full screen is the low latency view, latency in the settings window (2026-11-21)
+
+- **Full screen turns the low latency view on.** Choosing Full screen under Frame generation tab → Display now also turns the low latency view on (and Window turns it off), so playing in full screen always uses the fastest path. Before, the two were separate switches and full screen alone used the slower path.
+- **Full screen stays open when you click other programs.** A window on another monitor (Discord, a browser) leaves full screen on top. A window on the same monitor (or Alt+Tab) moves full screen behind it while it keeps running; clicking full screen or Alt+Tab back brings it on top again. Before, any window on the same monitor closed full screen.
+- **Latency in the settings window.** On the fast path the bottom status line shows `On · fast path · original→screen X ms`, the time from an original frame arriving to it being handed to the screen, averaged every 2 s. Before, the fast path was shown as "Engine starting".
+- **The reason for a failed start is in the diagnostics.** When the frame generation engine cannot start (the graphics card cannot be opened, a model file is missing, …), the reason is written to the log (`FG_ENGINE_ERROR`), to the exported diagnostics (`gpu_detail engine_error=…`) and to the failed Recommended settings page (report: RX 9070 XT, both RIFE and FSR 3 failed with no reason shown).
+- **Retry without Vulkan overlay layers.** If the graphics card cannot be opened on the first try, the engine tries once more with the Vulkan overlay layers of other programs (RivaTuner, Overwolf, Steam, Discord, ReShade …) turned off for ConsoleSmooth only. A PC that starts normally never reaches the retry. The diagnostics show when the retry was used (`implicit_layers=off`).
+- **The diagnostics now list the three usual suspects:** Windows build and Insider channel (`windows_build=… insider=…`), graphics driver versions (`gpu_driver …`) and the installed Vulkan overlay layers (`vulkan_implicit_layer …`).
+- New guides: 5-minute quick start in Korean, English, Chinese and Japanese (`docs/QUICK-START.*.md`) and how latency and quality are measured (`docs/MEASUREMENT.md`).
+- Latency unchanged (RTX 5080, PS5 GTA VI, NVIDIA Video Frame Generation 2x, full screen): the presentation mode stays Hardware: Independent Flip while another monitor is clicked and after Alt+Tab, and a 240 fps phone recording of passthrough and PC screen showed the same delay as 1.1.3 within one camera frame (4 ms).
+
 ## 1.1.3 — 3x and 4x with NVIDIA Video Frame Generation and RIFE (2026-11-20)
 
 - NVIDIA Video Frame Generation always uses the fast path, which made only the midpoint: choosing 3x or 4x still gave 2x (the settings window showed the higher rate). The fast path now makes 2 (3x) or 3 (4x) pictures per source at 1/3, 2/3 or 1/4, 1/2, 3/4 for NVIDIA Video Frame Generation, RIFE 4.6 and RIFE 4.15 lite, each with HUD protection, shown in order in the low latency view and in the Streaming Center output (recording, streaming). RIFE 3x/4x used the standard path before and now stays on the fast path.

@@ -204,6 +204,8 @@ static int frame_buffer_impl(void *pad,void *info,void *data){
  ++f->ticks;++f->cycle;++f->logical_ticks;
  {static double logged=-1;double ms=stream_buffer_ns?stream_buffer_ns(f->stream)/1000000.0:0;ui_publish_buffer(ms);if(ms!=logged){logged=ms;logline("FG_BUFFER ms=%.2f",ms);}}
  ui_publish(&current,w,h,ok?0:-1);
+ if(current.ready==-1&&stream_gpu_info){static void* errStream;if(errStream!=f->stream){const char* g=stream_gpu_info(f->stream);
+  if(g&&!strncmp(g,"engine_error=",13)){errStream=f->stream;AcquireSRWLockExclusive(&stage_lock);snprintf(ui_gpu_info,sizeof ui_gpu_info,"%s",g);ReleaseSRWLockExclusive(&stage_lock);logline("FG_ENGINE_ERROR %s",g+13);}}}
  if(InterlockedCompareExchange(&reco_trial,0,0)){AcquireSRWLockExclusive(&reco_lock);if(reco_group==f->group||(!reco_group&&current.generated+current.repeated>0)){reco_group=f->group;reco_cs=current;}ReleaseSRWLockExclusive(&reco_lock);}
  QueryPerformanceCounter(&cpuEnd);fps_duration(&f->cpu,1000.0*(cpuEnd.QuadPart-cpuStart.QuadPart)/cpuFreq.QuadPart,0);
  /* 1.9.6: game frame rate = changed images the engine accepted per second, over 2 s windows (see auto_content_x100). */

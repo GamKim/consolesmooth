@@ -92,14 +92,8 @@ static bool approved(const std::wstring& path,int i){
  if(m.family==3||m.family==4||m.family==5||m.family==6)return trusted(path+L"/"+m.basename,m.param_sha256);
  return trusted(path+L"/"+m.basename+L".param",m.param_sha256)&&trusted(path+L"/"+m.basename+L".bin",m.bin_sha256);
 }
-void* cs_create(const wchar_t* dir,int gpu){
- error.clear();if(!dir){error="Missing model directory";return nullptr;}
- std::wstring path(dir);
- int model=-1;
- if(path.size()<=230)for(int i=0;i<CS_MODEL_COUNT;i++)
-  if(cs_model_valid(i)&&approved(path,i)){model=i;break;}
- if(!cs_model_valid(model)){error="Approved model missing, changed, or path too long";return nullptr;}
- std::lock_guard<std::mutex> guard(lifecycle);
+static bool layers_off;
+static void* create_locked(const std::wstring& path,int model,int gpu){
  if(!users)ncnn::create_gpu_instance();
  int count=ncnn::get_gpu_count();
  if(gpu<0)gpu=ncnn::get_default_gpu_index();
@@ -120,6 +114,25 @@ void* cs_create(const wchar_t* dir,int gpu){
   if(rc!=0){if(error.empty())error="Model load failed";e.reset();if(!users)ncnn::destroy_gpu_instance();return nullptr;}
   ++users;return e.release();
  }catch(...){error="Model initialization exception";if(!users)ncnn::destroy_gpu_instance();return nullptr;}
+}
+void* cs_create(const wchar_t* dir,int gpu){
+ error.clear();if(!dir){error="Missing model directory";return nullptr;}
+ std::wstring path(dir);
+ int model=-1;
+ if(path.size()<=230)for(int i=0;i<CS_MODEL_COUNT;i++)
+  if(cs_model_valid(i)&&approved(path,i)){model=i;break;}
+ if(!cs_model_valid(model)){error="Approved model missing, changed, or path too long";return nullptr;}
+ std::lock_guard<std::mutex> guard(lifecycle);
+ // 1.1.4 (11-21, RX 9070 XT report: RIFE and FSR 3 both failed to start): Vulkan overlay layers (RivaTuner, Overwolf,
+ // Steam, Discord, ReShade ...) load into every Vulkan program and can break instance or device creation. When the
+ // first start of the Vulkan instance fails, try once more with the loader's implicit layers off (this process only).
+ // A PC that starts normally never reaches the retry, so nothing changes there.
+ void* e=create_locked(path,model,gpu);
+ if(!e&&!users&&!layers_off){std::string first=error;layers_off=true;SetEnvironmentVariableW(L"VK_LOADER_LAYERS_DISABLE",L"~implicit~");
+  e=create_locked(path,model,gpu);
+  if(e)static_cast<Engine*>(e)->info+=" implicit_layers=off(first start failed: "+first+")";
+  else error=first+" | again without Vulkan overlay layers: "+error;}
+ return e;
 }
 static int interpolate_impl(void* handle,const uint8_t* a,const uint8_t* b,int w,int h,int ch,float t,uint8_t* output,uint64_t aid,uint64_t bid){
  error.clear();auto* e=static_cast<Engine*>(handle);

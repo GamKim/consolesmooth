@@ -26,6 +26,7 @@ static ID3D11Device *direct_dev;static ID3D11DeviceContext *direct_ctx;static ID
 static ID3D11Texture2D *direct_tex;static ID3D11ShaderResourceView *direct_srv;static ID3D11RenderTargetView *direct_rtv;
 static ID3D11VertexShader *direct_vs;static ID3D11PixelShader *direct_ps,*direct_ps_sharp;static ID3D11SamplerState *direct_sampler;
 static HWND direct_hwnd;static D3D11_VIEWPORT direct_view;static HMONITOR direct_monitor;
+static int direct_behind; /* 2.3.15: stepped behind a window on our monitor */
 #define DIRECT_FOCUS_TIMER 2 /* while inactive: close once the active window is on our monitor */
 static LONG64 direct_presents,direct_repeats,direct_skips;static double direct_copy_ms,direct_present_ms;
 typedef HRESULT (WINAPI *CsCompile)(const void*,SIZE_T,const char*,const void*,void*,const char*,const char*,UINT,UINT,ID3DBlob**,ID3DBlob**);
@@ -105,15 +106,23 @@ static void direct_close(LONG reason){
 }
 static LRESULT CALLBACK direct_proc(HWND w,UINT m,WPARAM a,LPARAM b){
  /* Focus moved away: keep the window while the active window is on another monitor (checked now and every 250 ms),
-  * close as soon as one on this monitor is active, so a single-monitor user is never left under a topmost window. */
- if(m==WM_ACTIVATEAPP&&!direct_forced){if(a)KillTimer(w,DIRECT_FOCUS_TIMER);else{SetTimer(w,DIRECT_FOCUS_TIMER,250,NULL);PostMessageW(w,WM_TIMER,DIRECT_FOCUS_TIMER,0);}return 0;}
+  * (2.3.15: a window on this monitor no longer closes it, see below). WM_ACTIVATE also covers Streaming Center windows. */
+ /* 2.3.15 (11-21 user: keep the full screen when another program is clicked): a window on this monitor no longer closes
+  * it; the full screen steps behind that window (no longer topmost) and keeps running, and comes back on top when it is
+  * clicked or activated again. Windows on other monitors leave it on top as before (independent flip stays). */
+ if(m==WM_ACTIVATE&&!direct_forced){if(LOWORD(a)!=WA_INACTIVE){KillTimer(w,DIRECT_FOCUS_TIMER);if(direct_behind){direct_behind=0;SetWindowPos(w,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE);logline("DIRECT_FOCUS_BACK");}}else{SetTimer(w,DIRECT_FOCUS_TIMER,250,NULL);PostMessageW(w,WM_TIMER,DIRECT_FOCUS_TIMER,0);}return DefWindowProcW(w,m,a,b);}
  if(m==WM_TIMER&&a==DIRECT_FOCUS_TIMER){HWND fg=GetForegroundWindow();
   if(fg==w){KillTimer(w,DIRECT_FOCUS_TIMER);return 0;}
   /* The desktop (Progman/WorkerW) spans every monitor and counts as the largest one; use the pointer's monitor for it. */
   HMONITOR at=NULL;wchar_t cls[32]=L"";if(fg)GetClassNameW(fg,cls,32);
   if(fg&&(!wcscmp(cls,L"Progman")||!wcscmp(cls,L"WorkerW"))){POINT pt;if(GetCursorPos(&pt))at=MonitorFromPoint(pt,MONITOR_DEFAULTTONULL);}else if(fg)at=MonitorFromWindow(fg,MONITOR_DEFAULTTONULL);
   if(!at||at!=direct_monitor)return 0; /* other monitor (or a transition): stay */
-  logline("DIRECT_FOCUS_SAME_MONITOR");}
+  /* 2.3.17 (11-21 live): right after Alt+Tab the task switcher (topmost) is the foreground window; going behind it put
+   * this window back in the topmost band. Wait (timer keeps running) until a normal window is in front. */
+  if(fg&&(GetWindowLongW(fg,GWL_EXSTYLE)&WS_EX_TOPMOST))return 0;
+  KillTimer(w,DIRECT_FOCUS_TIMER);
+  if(fg&&wcscmp(cls,L"Progman")&&wcscmp(cls,L"WorkerW")){direct_behind=1;SetWindowPos(w,HWND_NOTOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);SetWindowPos(w,fg,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);}
+  logline("DIRECT_FOCUS_SAME_MONITOR behind=%d",direct_behind);return 0;}
  int leaving=m==WM_TIMER||m==WM_CLOSE||(m==WM_KEYDOWN&&a==VK_ESCAPE);
  if(leaving&&m==WM_KEYDOWN&&!direct_forced&&ui_panel)PostMessageW(ui_panel,UI_ESC_OFF,0,0); /* 2.2.5: Esc = turn generation off */
  if(leaving){logline("DIRECT_CLOSE message=%u",m);if(InterlockedCompareExchange(&direct_state,0,0)>=0)InterlockedExchange(&direct_state,-2);PostQuitMessage(0);return 0;}
@@ -173,7 +182,7 @@ static int direct_create(void){
  HRESULT hr=make_device((IDXGIAdapter*)adapter,D3D_DRIVER_TYPE_UNKNOWN,NULL,want_hdr?D3D11_CREATE_DEVICE_VIDEO_SUPPORT:0,NULL,0,D3D11_SDK_VERSION,&direct_dev,NULL,&direct_ctx);if(hr<0){logline("DIRECT_DEVICE_FAILED hr=%08lx",(unsigned long)hr);return 0;}
  IDXGIDevice1 *dd=NULL;if(ID3D11Device_QueryInterface(direct_dev,&cs_iid_device1,(void**)&dd)>=0){IDXGIDevice1_SetMaximumFrameLatency(dd,1);IDXGIDevice1_Release(dd);}
  WNDCLASSW wc={.lpfnWndProc=direct_proc,.hInstance=GetModuleHandleW(NULL),.lpszClassName=L"ConsoleSmoothDirectTest"};RegisterClassW(&wc);
- direct_hwnd=CreateWindowExW(WS_EX_TOPMOST,wc.lpszClassName,L"ConsoleSmooth full screen",WS_POPUP,wx,wy,sw,sh,NULL,NULL,wc.hInstance,NULL);if(!direct_hwnd){logline("DIRECT_WINDOW_FAILED %lu",GetLastError());return 0;}
+ direct_behind=0;direct_hwnd=CreateWindowExW(WS_EX_TOPMOST,wc.lpszClassName,L"ConsoleSmooth full screen",WS_POPUP,wx,wy,sw,sh,NULL,NULL,wc.hInstance,NULL);if(!direct_hwnd){logline("DIRECT_WINDOW_FAILED %lu",GetLastError());return 0;}
  direct_tearing=direct_tearing_check(factory);
  if(want_hdr&&!hdr_setup(direct_w,direct_h,sw,sh))hdr_restore();
  DXGI_SWAP_CHAIN_DESC1 desc={.Width=(UINT)sw,.Height=(UINT)sh,.Format=hdr_on?DXGI_FORMAT_R10G10B10A2_UNORM:DXGI_FORMAT_B8G8R8A8_UNORM,.SampleDesc={1,0},.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT,.BufferCount=3,.Scaling=DXGI_SCALING_NONE,.SwapEffect=DXGI_SWAP_EFFECT_FLIP_DISCARD,.AlphaMode=DXGI_ALPHA_MODE_IGNORE,.Flags=direct_tearing?DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING:0};

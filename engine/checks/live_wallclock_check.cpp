@@ -13,6 +13,7 @@ double cs_last_ms(void*){return 40;}
 double cs_last_gpu_wait_ms(void*){return -1;}
 int cs_last_stages(void*,double* o){o[0]=o[1]=o[2]=-1;return 1;}
 const char* cs_gpu_info(void*){return "";}
+const char* cs_last_error(){return "";}
 void cs_set_flow_floor(void*,int){}
 int cs_interpolate(void*,const uint8_t* a,const uint8_t*,int w,int h,float,uint8_t* out){
  std::this_thread::sleep_for(std::chrono::milliseconds(40));

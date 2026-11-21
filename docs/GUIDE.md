@@ -20,9 +20,9 @@ Nothing on the console (Switch, PS5) is changed. Only the captured picture on yo
 
 ## 2. Download
 
-1. Download `ConsoleSmooth-Plugin-Setup-1.1.3.exe` from the [latest release](https://github.com/GamKim/consolesmooth/releases/latest).
+1. Download `ConsoleSmooth-Plugin-Setup-1.1.4.exe` from the [latest release](https://github.com/GamKim/consolesmooth/releases/latest).
 2. The installer isn't code-signed, so Windows may show a "Windows protected your PC" warning. Click **More info → Run anyway**.
-   - If you want to check the file, compare its hash with `SHA256SUMS-1.1.3.txt` on the same page (PowerShell: `Get-FileHash <file>`).
+   - If you want to check the file, compare its hash with `SHA256SUMS-1.1.4.txt` on the same page (PowerShell: `Get-FileHash <file>`).
 
 ## 3. Install
 
@@ -65,10 +65,17 @@ Nothing on the console (Switch, PS5) is changed. Only the captured picture on yo
 6. Click **Turn frame generation on** on the toolbar, or press **Ctrl+Alt+F**. It's on!
    - A readout `input / now fps` appears in a corner. For example, a 60 fps input at 2x shows `60 / 120`.
 
+> **Use full screen when you play.** Choosing **Full screen** under Frame generation tab → Display **turns the low latency view on with it.** This gives the shortest latency (about 9-19 ms after the original at 2x). Use **Window** only when you want to watch the Streaming Center screen, for example to check a recording; it adds latency.
+> After changing it the first time, restart Streaming Center once. Restart again whenever the settings window asks for it.
+
 ## 5. Turn it off
 
 - Click the same button (now **Turn frame generation off**) or press **Ctrl+Alt+F** again. Off means the normal preview.
 - In **full screen**, **Esc** closes full screen and turns generation off. Turning it on again opens full screen.
+- Full screen **stays open when you click other programs.**
+  - While you use a window on another monitor (Discord, a browser…), full screen stays on top and the latency stays the same.
+  - Clicking a window on the same monitor (or Alt+Tab) moves full screen behind that window for a while. Click full screen again or Alt+Tab back and it returns on top.
+  - The on/off shortcut (default **Ctrl+Alt+F**) turns it off even while it is behind another window.
 
 ## 6. Settings people change most
 
@@ -77,9 +84,8 @@ Changes in the settings window are saved with **Apply** and take effect **the ne
 | I want to… | Where |
 |---|---|
 | Better quality / lighter on the GPU | Frame generation tab → Model: **RIFE 4.15 lite** or **NVIDIA Video Frame Generation** (quality) / **FSR 3** or **AMD FSR Frame Generation** (light) |
-| Lowest latency | Display tab → turn **Low latency view** on + full screen, 2x, then restart Streaming Center (about 9-19 ms after the original) |
+| Lowest latency (for playing) | Frame generation tab → Display: **Full screen** (turns the low latency view on with it), 2x, then restart Streaming Center (about 9-19 ms after the original) |
 | Match a 160 Hz (or other) monitor | Frame generation tab → Output mode: **Target fps** = your refresh rate |
-| Shave latency | Frame generation tab → Display: **Full screen** (shorter than a window) |
 | Even spacing instead of less smear | Display tab → turn **Show generated frames briefly** off (on by default: generated about 8 ms, original about 25 ms) |
 | Full screen in HDR (NVIDIA RTX + HDR monitor) | Advanced tab → turn **RTX Video HDR** on (Windows HDR is turned on only while the full screen is open if it was off; the "RTX HDR" badge in the top-right corner comes from NVIDIA and is normal) |
 | Even pacing in 30 fps games (GTA V quality mode, Bloodborne) | Advanced tab → **30fps smoothing** (about +8 ms latency, off by default) |
@@ -117,7 +123,8 @@ Changes in the settings window are saved with **Apply** and take effect **the ne
 
 **I can feel the delay**
 - You play while watching the preview, so it's later than passthrough (console straight to the monitor). For fighting and rhythm games use passthrough.
-- **Full screen** has less latency than a window. Measurements are in the [README](../README.md).
+- Use **full screen** when you play (it turns the low latency view on). A window adds latency. Measurements are in the [README](../README.md).
+- `original→screen X ms` on the bottom status line of the settings window is measured inside the program; the capture card and monitor are not included ([how we measure](MEASUREMENT.md)).
 
 **Letters or HUD look broken**
 - Turn **HUD protection** off in the Advanced tab (it can happen with see-through text boxes, in-game web pages, or a third-person character standing still in the middle).

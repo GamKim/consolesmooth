@@ -138,7 +138,7 @@ static int gpu_view_wanted(void){
  static int cached=-1;if(cached>=0)return cached;wchar_t v[4];DWORD e=GetEnvironmentVariableW(L"CS_TEST_GPU_VIEW",v,4);
  if(e==1){cached=v[0]==L'1';return cached;}
  wchar_t dir[32768],path[32768];DWORD n=GetEnvironmentVariableW(L"CS_SETTINGS_DIR",dir,32768);if(!n)n=GetEnvironmentVariableW(L"CS_ENGINE_DIR",dir,32768);
- cached=0;if(n&&n<32000){swprintf(path,32768,L"%ls\\settings.ini",dir);cached=GetPrivateProfileIntW(L"preview",L"low_latency_view",0,path)==1&&GetPrivateProfileIntW(L"preview",L"display_mode",0,path)==1;}
+ cached=0;if(n&&n<32000){swprintf(path,32768,L"%ls\\settings.ini",dir);cached=GetPrivateProfileIntW(L"preview",L"display_mode",0,path)==1;} /* 2.3.15: full screen always means the low latency view */
  logline("GPU_VIEW wanted=%d",cached);return cached;
 }
 static void *gpu_out_bin(void){

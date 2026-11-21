@@ -5,7 +5,7 @@
  * log lines. Nothing is sent anywhere. The user name is masked; the computer name is not collected.
  */
 #include <cpuid.h>
-#define CS_PLUGIN_VERSION "1.1.3"
+#define CS_PLUGIN_VERSION "1.1.4"
 static void diag_cpu(char out[49]){
  unsigned r[12]={0},eax,ebx,ecx,edx;out[0]=0;
  if(!__get_cpuid(0x80000000,&eax,&ebx,&ecx,&edx)||eax<0x80000004)return;
@@ -21,6 +21,44 @@ static void diag_write_masked(HANDLE f,const char *line,const char *user){
  DWORD written;const char *at=line;size_t length=strlen(user);
  if(length)for(const char *hit;(hit=strstr(at,user));at=hit+length){WriteFile(f,at,(DWORD)(hit-at),&written,NULL);WriteFile(f,"USER",4,&written,NULL);}
  WriteFile(f,at,(DWORD)strlen(at),&written,NULL);WriteFile(f,"\r\n",2,&written,NULL);
+}
+/* 1.1.4 (11-21, RX 9070 XT report): the three suspects for an engine that cannot start, in the file itself:
+ * the Windows build and Insider channel, the graphics driver versions, and the Vulkan implicit layers (overlays such
+ * as RivaTuner, Overwolf, Steam, Discord, ReShade load into every Vulkan program). */
+static void diag_reg_text(HKEY root,const wchar_t *key,const wchar_t *value,char *out,int cap){
+ wchar_t w[512];DWORD size=sizeof w;out[0]=0;
+ if(RegGetValueW(root,key,value,RRF_RT_REG_SZ,NULL,w,&size)==ERROR_SUCCESS)WideCharToMultiByte(CP_UTF8,0,w,-1,out,cap,NULL,NULL);
+ else{DWORD d=0;size=sizeof d;if(RegGetValueW(root,key,value,RRF_RT_REG_DWORD,NULL,&d,&size)==ERROR_SUCCESS)snprintf(out,cap,"%lu",(unsigned long)d);}
+}
+static void diag_system(HANDLE f,const char *user){
+ static const wchar_t *nt=L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion";
+ char build[64],ubr[32],shown[64],lab[160],branch[96],preview[16],ring[96],line[1200];
+ diag_reg_text(HKEY_LOCAL_MACHINE,nt,L"CurrentBuild",build,sizeof build);diag_reg_text(HKEY_LOCAL_MACHINE,nt,L"UBR",ubr,sizeof ubr);
+ diag_reg_text(HKEY_LOCAL_MACHINE,nt,L"DisplayVersion",shown,sizeof shown);diag_reg_text(HKEY_LOCAL_MACHINE,nt,L"BuildLabEx",lab,sizeof lab);
+ diag_reg_text(HKEY_LOCAL_MACHINE,L"SOFTWARE\\Microsoft\\WindowsSelfHost\\Applicability",L"BranchName",branch,sizeof branch);
+ diag_reg_text(HKEY_LOCAL_MACHINE,L"SOFTWARE\\Microsoft\\WindowsSelfHost\\Applicability",L"EnablePreviewBuilds",preview,sizeof preview);
+ diag_reg_text(HKEY_LOCAL_MACHINE,L"SOFTWARE\\Microsoft\\WindowsSelfHost\\UI\\Selection",L"UIBranch",ring,sizeof ring);
+ int insider=branch[0]||ring[0]||strstr(lab,"prerelease")!=NULL;
+ diag_write(f,"windows_build=%s.%s version=%s lab=%s insider=%d branch=%s ui_branch=%s preview_builds=%s\r\n",build,ubr,shown,lab,insider,branch[0]?branch:"-",ring[0]?ring:"-",preview[0]?preview:"-");
+ /* Display adapters as Windows installed them: name, driver version and date. */
+ HKEY cls;
+ if(RegOpenKeyExW(HKEY_LOCAL_MACHINE,L"SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}",0,KEY_READ,&cls)==ERROR_SUCCESS){
+  wchar_t sub[64];for(DWORD i=0;;i++){DWORD len=64;if(RegEnumKeyExW(cls,i,sub,&len,NULL,NULL,NULL,NULL)!=ERROR_SUCCESS)break;if(sub[0]<L'0'||sub[0]>L'9')continue;
+   char desc[256],ver[64],date[64];diag_reg_text(cls,sub,L"DriverDesc",desc,sizeof desc);if(!desc[0])continue;
+   diag_reg_text(cls,sub,L"DriverVersion",ver,sizeof ver);diag_reg_text(cls,sub,L"DriverDate",date,sizeof date);
+   diag_write(f,"gpu_driver name=%s version=%s date=%s\r\n",desc,ver[0]?ver:"-",date[0]?date:"-");}
+  RegCloseKey(cls);}
+ /* Vulkan implicit layers (value = manifest path, data 0 = enabled). */
+ static const struct{HKEY root;const wchar_t *key;const char *where;}layers[]={
+  {HKEY_LOCAL_MACHINE,L"SOFTWARE\\Khronos\\Vulkan\\ImplicitLayers","machine"},{HKEY_CURRENT_USER,L"SOFTWARE\\Khronos\\Vulkan\\ImplicitLayers","user"}};
+ int count=0;
+ for(int k=0;k<2;k++){HKEY h;if(RegOpenKeyExW(layers[k].root,layers[k].key,0,KEY_READ,&h)!=ERROR_SUCCESS)continue;
+  for(DWORD i=0;;i++){wchar_t name[600];DWORD len=600,type=0,data=0,size=sizeof data;
+   if(RegEnumValueW(h,i,name,&len,NULL,&type,(BYTE*)&data,&size)!=ERROR_SUCCESS)break;
+   char path[1000];WideCharToMultiByte(CP_UTF8,0,name,-1,path,sizeof path,NULL,NULL);
+   snprintf(line,sizeof line,"vulkan_implicit_layer %s enabled=%d file=%s",layers[k].where,type==REG_DWORD&&data==0,path);diag_write_masked(f,line,user);count++;}
+  RegCloseKey(h);}
+ diag_write(f,"vulkan_implicit_layers=%d\r\n",count);
 }
 static HANDLE diag_create(const wchar_t *dir,const wchar_t *name,wchar_t *path,int cap){
  if(swprintf(path,cap,L"%ls\\%ls",dir,name)<0)return INVALID_HANDLE_VALUE;
@@ -48,6 +86,7 @@ static void diag_export(HWND owner,const CsCountWindow *counts){
  diag_write(f,"ConsoleSmooth diagnostics\r\nplugin=%s\r\ntime=%04d-%02d-%02d %02d:%02d:%02d\r\n",CS_PLUGIN_VERSION,t.wYear,t.wMonth,t.wDay,t.wHour,t.wMinute,t.wSecond);
  typedef LONG (WINAPI *RtlVersion)(OSVERSIONINFOW*);OSVERSIONINFOW os={.dwOSVersionInfoSize=sizeof os};RtlVersion version=(RtlVersion)(void*)GetProcAddress(GetModuleHandleW(L"ntdll.dll"),"RtlGetVersion");
  if(version&&!version(&os))diag_write(f,"windows=%lu.%lu.%lu\r\n",os.dwMajorVersion,os.dwMinorVersion,os.dwBuildNumber);
+ diag_system(f,user);
  char cpu[49];diag_cpu(cpu);diag_write(f,"cpu=%s\r\n",cpu);
  MEMORYSTATUSEX memory={.dwLength=sizeof memory};if(GlobalMemoryStatusEx(&memory))diag_write(f,"ram_total_mb=%llu ram_free_mb=%llu\r\n",(unsigned long long)(memory.ullTotalPhys>>20),(unsigned long long)(memory.ullAvailPhys>>20));
  DISPLAY_DEVICEW device={.cb=sizeof device};

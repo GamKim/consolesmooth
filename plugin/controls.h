@@ -59,6 +59,9 @@ static void direct_ui_sync(int allowed,int reopen);
 static LONG direct_status(void);
 static void direct_set_label(const wchar_t *text,int on);
 static double direct_rate(void);
+/* 2.3.14 (11-21 report "지금 바로"): measured arrival -> on screen of originals on the GPU path (gpu_view.h), x10 ms, with
+ * the GetTickCount64 time it was last updated; shown in the settings status line as an internal estimate. */
+static volatile LONG cs_lat_x10;static volatile LONG64 cs_lat_at;
 /* Bits 8-15 hold the manual stable buffer or, in low latency, a shorter buffer choice; 0 = plan buffer. */
 static int ui_buffer_bits(int stable,int manual,int low){return stable?manual:low==25?0:low;}
 static HWND ui_items[200];
@@ -170,7 +173,9 @@ static int ui_preferences(int save){
   {ui_genshort=GetPrivateProfileIntW(L"preview",L"gen_short",1,path)!=0;int gs=GetPrivateProfileIntW(L"preview",L"gen_share",ui_genshort?25:50,path);if(gs<20)gs=20;if(gs>50)gs=50;InterlockedExchange(&gen_share_pct,gs);InterlockedExchange(&gen_sharpen,GetPrivateProfileIntW(L"preview",L"gen_sharpen",0,path)==1);}
   ui_hot_mods=GetPrivateProfileIntW(L"preview",L"hotkey_mods",MOD_CONTROL|MOD_ALT,path)&(MOD_CONTROL|MOD_ALT|MOD_SHIFT);ui_hot_vk=GetPrivateProfileIntW(L"preview",L"hotkey_vk",'F',path);if(ui_hot_vk<0||ui_hot_vk>255)ui_hot_vk='F';if(ui_hot_vk&&!(ui_hot_mods&(MOD_CONTROL|MOD_ALT)))ui_hot_mods|=MOD_CONTROL|MOD_ALT;
   ui_sync=GetPrivateProfileIntW(L"preview",L"sync_mode",0,path);if(ui_sync<0||ui_sync>2)ui_sync=0;InterlockedExchange(&direct_sync,ui_sync);
-  ui_lowview=GetPrivateProfileIntW(L"preview",L"low_latency_view",0,path)==1;InterlockedExchange(&low_view,test_lowview); /* 2.2.4: active only after the on button */
+  ui_lowview=GetPrivateProfileIntW(L"preview",L"low_latency_view",0,path)==1||ui_display; /* 2.3.15: full screen = low latency view */
+  if(ui_lowview&&!ui_display)ui_display=1; /* and the low latency view always shows in full screen */
+  InterlockedExchange(&low_view,test_lowview); /* 2.2.4: active only after the on button */
   {int c=GetPrivateProfileIntW(L"preview",L"fps_corner",1,path);InterlockedExchange(&ui_fps_corner,c>=0&&c<=3?c:1);}
   ui_cadence=GetPrivateProfileIntW(L"preview",L"cadence30",0,path)!=0;ui_hudkeep=GetPrivateProfileIntW(L"preview",L"hud_keep",1,path)!=0; /* 1.9.6: default on (user 11-10) */
   ui_gpukeep=GetPrivateProfileIntW(L"preview",L"gpu_keep",ui_primary_is_amd()?1:0,path)==1;ui_fsrfast=GetPrivateProfileIntW(L"preview",L"fsr_fast",0,path)!=0;ui_latency=GetPrivateProfileIntW(L"preview",L"latency_priority",0,path)==1;InterlockedExchange(&engine_options,UI_ENGINE_BITS());
@@ -556,7 +561,7 @@ static void ui_refresh(void){
  ui_text(ui_toggle,bits&1?ui_tr(L"프레임 생성 끄기",L"Turn frame generation off"):ui_tr(L"프레임 생성 켜기",L"Turn frame generation on"));ui_text(ui_items[111],bits&1?ui_tr(L"프레임 생성 켜짐",L"Frame generation on"):ui_tr(L"프레임 생성 꺼짐",L"Frame generation off"));
  ui_text(ui_items[144],ui_show_fps?ui_tr(L"프레임 표시 켜짐",L"FPS display on"):ui_tr(L"프레임 표시 꺼짐",L"FPS display off"));
  {wchar_t cornerText[32];swprintf(cornerText,32,L"%ls  ▾",ui_corner_name(ui_fps_corner));ui_text(ui_items[165],cornerText);}
- double delivered=0;int measuring=fps_snapshot(&delivered);wchar_t fpsText[256],inputText[64];
+ double delivered=0;int measuring=fps_snapshot(&delivered);wchar_t fpsText[400],inputText[64];
  /* 1.9.6: the slow checks count from the moment the engine is ready, not from the setting change. A model change rebuilds the
   * engine (RIFE load + calibration on the office RX 6600 takes seconds) and its first seconds always repeat. */
  {static int readyWas;int readyNow=s.ready==1;if(readyNow&&!readyWas&&!InterlockedCompareExchange(&auto_gpu_slow,0,0)){ui_slow_start=GetTickCount64();ui_slow_low=0;logline("UI_SLOW_TIMER_RESTART engine_ready=1");}readyWas=readyNow;}
@@ -567,6 +572,9 @@ static void ui_refresh(void){
  if(detected.live&&contentLow)swprintf(inputText,64,ui_tr(L"입력 %.2f fps (게임 약 %.0f fps)",L"Input %.2f fps (game about %.0f fps)"),(double)detected.sn/detected.sd,contentFps);
  else if(detected.live)swprintf(inputText,64,ui_tr(L"입력 %.2f fps",L"Input %.2f fps"),(double)detected.sn/detected.sd);else wcscpy(inputText,ui_tr(L"입력 신호 대기",L"Waiting for input"));
  int active=(bits&1)&&detected.live&&detected.supported&&!error&&s.ready==1&&GetTickCount64()-statsUpdated<1500;
+ /* 2.3.17 (11-21): the GPU path (low latency view + full screen) never readies the CPU engine, so the window said
+  * "engine starting" and hid the latency. It counts as running while it reports a latency (gpu_view.h, every 2 s). */
+ int gpuLive=(bits&1)&&InterlockedCompareExchange(&gpu_path_active,0,0)==1&&GetTickCount64()-(ULONGLONG)InterlockedCompareExchange64(&cs_lat_at,0,0)<4000;
  if(ui_meter_mode!=bits||!active){ui_counts=(CsCountWindow){0};ui_meter_mode=bits;}
  if(active){LARGE_INTEGER now,freq;QueryPerformanceCounter(&now);QueryPerformanceFrequency(&freq);fps_counts(&ui_counts,(uint64_t)now.QuadPart,(uint64_t)freq.QuadPart,s.generated,s.repeated);}
  /* The first seconds after a start always repeat (measured: about 15 s), and the slow timer restarts on any setting change. */
@@ -597,7 +605,9 @@ static void ui_refresh(void){
  wchar_t overlayText[100];wcscpy(overlayText,outputText);if(detected.live&&!slow){if(pictureText[0])wcscpy(overlayText,pictureText);else swprintf(overlayText,100,L"%ls / %ls fps",sourceRateText,previewRateText);}
  direct_set_label(overlayText,ui_show_fps&&(bits&1));
  if(ui_meter)ui_text(ui_items[147],outputText);if(ui_full_meter&&wcscmp(ui_full_text,overlayText)){wcscpy(ui_full_text,overlayText);ui_full_dirty=1;}
- swprintf(fpsText,256,ui_tr(L"%ls · 생성 %.1f fps · 반복 %.1f fps · 지금 %.0f fps\r\n생성: 새 프레임 · 반복: 이전 화면 유지",L"%ls · generated %.1f fps · repeated %.1f fps · now %.0f fps\r\ngenerated: new frame · repeated: previous picture kept"),inputText,active?ui_counts.gen_fps:0.0,active?ui_counts.repeat_fps:0.0,active?shownFps:0.0);
+ swprintf(fpsText,400,ui_tr(L"%ls · 생성 %.1f fps · 반복 %.1f fps · 지금 %.0f fps\r\n생성: 새 프레임 · 반복: 이전 화면 유지",L"%ls · generated %.1f fps · repeated %.1f fps · now %.0f fps\r\ngenerated: new frame · repeated: previous picture kept"),inputText,active?ui_counts.gen_fps:0.0,active?ui_counts.repeat_fps:0.0,active?shownFps:0.0);
+ if((active||gpuLive)&&GetTickCount64()-(ULONGLONG)InterlockedCompareExchange64(&cs_lat_at,0,0)<4000){size_t n=wcslen(fpsText);
+  swprintf(fpsText+n,400-n,ui_tr(L" · 원본 도착→화면 약 %.1f ms(프로그램 안)",L" · original arrival→screen about %.1f ms (inside)"),InterlockedCompareExchange(&cs_lat_x10,0,0)/10.0);}
  ui_text(ui_items[146],fpsText);
  ui_text(ui_items[183],ui_fps_game?ui_tr(L"화면 숫자: 원본 / 지금 fps · 원본 = 게임이 1초에 바꾼 화면 · 지금 = 원본 + 생성한 장",L"Readout: original / now fps · original = game pictures/s · now = original + generated"):ui_tr(L"화면 숫자: 입력 / 지금 fps · 입력 = 캡처 신호 · 지금 = 1초에 화면에 낸 장",L"Readout: input / now fps · input = capture signal · now = frames shown per second")); /* 1.0.1 (11-13 user) */
  ui_text(ui_items[129],ui_mode?ui_tr(L"목표 프레임",L"Target fps"):ui_tr(L"배수",L"Multiplier"));for(int i=134;i<=136;i++)ShowWindow(ui_items[i],ui_mode||ui_tab?SW_HIDE:SW_SHOW);
@@ -644,8 +654,11 @@ static void ui_refresh(void){
  if(adaptive&&(!actualBuffer||s.ready!=1||ui_stable!=ui_saved_stable||ui_buffer!=ui_saved_buffer))wcscpy(text,ui_tr(L"버퍼 자동 · 최대 200ms",L"Buffer auto · up to 200ms"));
  else swprintf(text,512,ui_tr(L"생성 버퍼 %.1f ms%ls%ls",L"Buffer %.1f ms%ls%ls"),buffer,adaptive?ui_tr(L" · 자동",L" · auto"):L"",!ui_stable&&!ui_low_eligible?(detected.live&&detected.sn<50*detected.sd?ui_tr(L" · 30fps 입력은 다음 원본을 기다려야 해서 고정",L" · fixed at 30fps input (waits for the next frame)"):ui_tr(L" · 25ms 미만은 FHD 60→120 전용",L" · below 25ms: FHD 60→120 only")):ui_tr(L" · 클수록 지연 증가",L" · larger means more latency"));
  }else wcscpy(text,ui_tr(L"목표는 입력보다 높고 입력의 4배 이하여야 합니다.",L"Target must be above the input and at most 4× the input."));ui_text(ui_items[127],text);
- const wchar_t *state=!(bits&1)?ui_tr(L"꺼짐 · 원본 표시",L"Off · showing original"):error==-3?ui_tr(L"출력 변경 중 · 원본 표시",L"Changing output · showing original"):error||s.ready<0?ui_tr(L"입력 또는 엔진 확인 필요",L"Check the input or engine"):s.ready==0?ui_tr(L"엔진 준비 중",L"Engine starting"):ui_tr(L"켜짐",L"On");
- if(!(bits&1))wcscpy(text,ui_tr(L"꺼짐 · 원본 표시",L"Off · showing original"));else if(!detected.provider)wcscpy(text,ui_tr(L"장치 연결 대기 · 원본 표시",L"Waiting for device · showing original"));else if(!detected.live)wcscpy(text,ui_tr(L"입력 신호 없음 · 원본 표시",L"No input signal · showing original"));else if(!detected.supported)wcscpy(text,ui_tr(L"지원 입력 확인 필요 · 원본 표시",L"Check supported input · showing original"));else swprintf(text,512,L"%.2f → %.2f fps · %ls%ls",(double)detected.sn/detected.sd,(double)detected.tn/detected.td,state,synthetic?ui_tr(L" · 합성 영상 시험",L" · synthetic video test"):L"");ui_text(ui_items[105],text);
+ const wchar_t *state=!(bits&1)?ui_tr(L"꺼짐 · 원본 표시",L"Off · showing original"):error==-3?ui_tr(L"출력 변경 중 · 원본 표시",L"Changing output · showing original"):gpuLive&&!error?ui_tr(L"켜짐 · 빠른 방식",L"On · fast path"):error||s.ready<0?ui_tr(L"입력 또는 엔진 확인 필요",L"Check the input or engine"):s.ready==0?ui_tr(L"엔진 준비 중",L"Engine starting"):ui_tr(L"켜짐",L"On");
+ if(!(bits&1))wcscpy(text,ui_tr(L"꺼짐 · 원본 표시",L"Off · showing original"));else if(!detected.provider)wcscpy(text,ui_tr(L"장치 연결 대기 · 원본 표시",L"Waiting for device · showing original"));else if(!detected.live)wcscpy(text,ui_tr(L"입력 신호 없음 · 원본 표시",L"No input signal · showing original"));else if(!detected.supported)wcscpy(text,ui_tr(L"지원 입력 확인 필요 · 원본 표시",L"Check supported input · showing original"));else swprintf(text,512,L"%.2f → %.2f fps · %ls%ls",(double)detected.sn/detected.sd,(double)detected.tn/detected.td,state,synthetic?ui_tr(L" · 합성 영상 시험",L" · synthetic video test"):L"");
+ /* 2.3.18 (11-21 user): the latency belongs on this bottom status line (item 146 is not where people look). */
+ if((bits&1)&&(active||gpuLive)&&GetTickCount64()-(ULONGLONG)InterlockedCompareExchange64(&cs_lat_at,0,0)<4000){size_t n=wcslen(text);swprintf(text+n,512-n,ui_tr(L" · 원본→화면 %.1f ms",L" · original→screen %.1f ms"),InterlockedCompareExchange(&cs_lat_x10,0,0)/10.0);}
+ ui_text(ui_items[105],text);
  int rateDirty=ui_saved_mode!=ui_mode||ui_saved_mult!=ui_mult||ui_saved_target!=ui_target;
  int recording=InterlockedCompareExchange(&record_branches,0,0)>0;
  const wchar_t *status=!valid?(engineOk?ui_tr(L"목표 프레임을 확인하세요.",L"Check the target fps."):ui_tr(L"FSR 3은 배수 모드의 2배만 지원합니다.",L"FSR 3 supports only 2x in multiplier mode.")):error==-2?ui_tr(L"설정을 저장하지 못했습니다.",L"Could not save settings."):error==-3?ui_tr(L"출력 변경 중",L"Changing output"):L"";
@@ -662,7 +675,7 @@ static void ui_refresh(void){
   if(!ui_display)wcscpy(displayText,ui_stable?ui_tr(L"안정 우선은 지연이 길어 전체 화면을 권장합니다 · 창은 Streaming Center 화면 유지",L"Stable adds latency · full screen recommended · a window keeps the Streaming Center view"):ui_tr(L"Streaming Center 화면을 보며 창 이동 가능 · 전체 화면보다 지연이 깁니다",L"Movable window in Streaming Center · more latency than full screen"));
   else if(shown==-1&&ui_saved_display)wcscpy(displayText,ui_tr(L"전체 화면 표시 실패 · 창으로 표시 중 · 적용을 누르면 다시 시도합니다.",L"Full screen failed · showing a window · press Apply to retry."));
   else if(detected.live&&!fits)swprintf(displayText,160,ui_tr(L"주 모니터 %dHz는 목표의 배수가 아님 · 조금 고르지 않을 수 있음 · Esc로 복귀",L"Main monitor %dHz is not a multiple of the target · may be slightly uneven · Esc to return"),hz);
-  else wcscpy(displayText,ui_tr(L"창보다 지연이 짧음 · 주 모니터 전체 · Esc로 복귀 · 다른 모니터 클릭 가능",L"Less latency than a window · main monitor · Esc to return · other monitors stay usable"));
+  else wcscpy(displayText,ui_tr(L"저지연 보기 켜짐 · 주 모니터 전체 · 다른 창을 눌러도 유지 · Esc로 끄기",L"Low latency view on · main monitor · stays when you click other windows · Esc turns it off"));
   /* 2.3.3: the faster GPU path is chosen when Streaming Center builds its preview; say when a restart changes it. */
   {LONG act=InterlockedCompareExchange(&gpu_path_active,0,0);
    if(InterlockedCompareExchange(&gpu_path_failed_now,0,0))wcscpy(displayText,ui_tr(L"빠른 저지연 방식을 이 PC에서 쓸 수 없어 다음 시작부터 기존 방식을 씁니다 · Streaming Center를 다시 시작하세요",L"The faster low latency path failed on this PC · the next start uses the standard path · restart Streaming Center"));
@@ -799,14 +812,14 @@ static LRESULT CALLBACK ui_proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
    case 179:ui_sharpen=!ui_sharpen;InterlockedExchange(&direct_sharpen,ui_sharpen);ui_save_sharpen();break;
    case 196:ui_hot_capture=1;ui_hot_register();SetFocus(ui_items[196]);break;
    case 191:case 192:case 193:ui_sync=id-191;InterlockedExchange(&direct_sync,ui_sync);ui_save_sync();break;
-   case 186:ui_lowview=!ui_lowview;ui_save_lowview();break; /* 2.2.4: takes effect at the next turn-on */
+   case 186:ui_lowview=!ui_lowview;ui_save_lowview();ui_display=ui_lowview;break; /* 2.2.4: takes effect at the next turn-on; 2.3.15: low latency view = full screen */
    case 161:ui_cadence=!ui_cadence;ui_save_options();break;
    case 163:ui_hudkeep=!ui_hudkeep;ui_save_options();break;
    case 168:ui_gpukeep=!ui_gpukeep;ui_save_options();break;
    case 171:ui_fsrfast=!ui_fsrfast;ui_save_options();break;
    case 181:ui_latency=!ui_latency;ui_save_options();break;
    case 149:case 150:ui_record=id==150;break;
-   case 154:case 155:ui_display=id==155;break;
+   case 154:case 155:ui_display=id==155;if(ui_lowview!=ui_display){ui_lowview=ui_display;ui_save_lowview();}break; /* 2.3.15 (11-21 user): full screen turns the low latency view on, window turns it off */
    case 112:ui_menu(0);SetFocus(ui_settings);return 0;
    
    case 132:case 133:ui_mode=id==133;break;

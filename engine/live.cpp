@@ -514,7 +514,13 @@ struct Live {
  void run(int workerIndex)noexcept{
   void* engine=nullptr;
   try{
-   engine=cs_create(model.c_str(),gpu);if(!engine)throw 1;
+   // 1.1.4 (11-21, 9070 XT report): a failed start left no reason in the diagnostics. Worker 0 keeps the engine's error
+   // in gpuInfo (set once, never changed afterwards, like the normal line) so the plugin can log and export it.
+   engine=cs_create(model.c_str(),gpu);
+#ifndef CS_SCHEDULE_TEST
+   if(!engine&&workerIndex==0){std::string why=std::string("engine_error=")+cs_last_error();std::lock_guard<std::mutex> l(mutex);if(gpuInfo.empty())gpuInfo=why;}
+#endif
+   if(!engine)throw 1;
    // 1.8.0: worker 0 builds the whole line and publishes it once; cs_live_gpu_info hands out its pointer, so it is never
    // changed afterwards (1.7.8/1.7.9 appended the keep result after publishing).
    std::string info;

@@ -10,6 +10,16 @@ This is a personal project, not affiliated with AVerMedia, and it contains no AV
 
 **Test results at a glance: https://gamkim.github.io/consolesmooth/** (latency and quality tables with the comparison videos, in Korean)
 
+## What is new in 1.1.4
+
+- **Full screen turns the low latency view on.** Pick Full screen when you play and you get the fastest path (Window turns the low latency view off).
+- **Full screen stays open when you click other programs.** It stays on top while you use a window on another monitor; a window on the same monitor or Alt+Tab moves it behind for a while, and clicking it brings it back.
+- **Latency on the bottom status line of the settings window:** `On · fast path · original→screen X ms` (measured inside the program).
+- When the frame generation engine cannot start, the reason shows in the diagnostics and on the failed Recommended settings page. If something goes wrong, attach the file from Advanced tab → export diagnostics to an [issue](https://github.com/GamKim/consolesmooth/issues).
+- If the graphics card cannot be opened on the first try, it tries once more with other programs' Vulkan overlays (RivaTuner, Overwolf, Steam, Discord, ReShade …) turned off. The diagnostics now include the Windows build and Insider channel, graphics driver versions and the installed Vulkan overlays.
+- 5-minute quick start in Korean, English, Chinese and Japanese: [docs/QUICK-START.en.md](docs/QUICK-START.en.md) · How we measure: [docs/MEASUREMENT.md](docs/MEASUREMENT.md)
+- Latency is the same as 1.1.3 (240 fps recording next to the passthrough, within 4 ms).
+
 ## What is new in 1.1.3
 
 - **3x/4x with NVIDIA Video Frame Generation and RIFE**: NVIDIA Video Frame Generation always uses the fast path, which made only one picture between originals, so 3x/4x gave 2x. The fast path now makes 2 (3x) or 3 (4x) pictures for NVIDIA Video Frame Generation, RIFE 4.6 and RIFE 4.15 lite, in the low latency view and in recording/streaming. 30 fps game at 4x = 120 new pictures per second (RTX 5080, no drops).
@@ -67,7 +77,7 @@ Score of the 60 fps made from the same 30 fps input against a real 60 fps record
 
 ## Install
 
-Download `ConsoleSmooth-Plugin-Setup-1.1.3.exe` from [Releases](https://github.com/GamKim/consolesmooth/releases) and run it. The installer is not signed; if SmartScreen warns, choose "More info → Run anyway". Illustrated guide: [docs/GUIDE.md](docs/GUIDE.md). All settings: [installer/INSTALL-README-EN.txt](installer/INSTALL-README-EN.txt).
+Download `ConsoleSmooth-Plugin-Setup-1.1.4.exe` from [Releases](https://github.com/GamKim/consolesmooth/releases) and run it. The installer is not signed; if SmartScreen warns, choose "More info → Run anyway". Illustrated guide: [docs/GUIDE.md](docs/GUIDE.md). All settings: [installer/INSTALL-README-EN.txt](installer/INSTALL-README-EN.txt).
 
 ## Uninstall
 
