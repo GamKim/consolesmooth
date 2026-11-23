@@ -49,7 +49,7 @@ static class Setup {
  }
  static string Root(string p){p=Path.GetFullPath(p).TrimEnd(Path.DirectorySeparatorChar);if(p.Length<8||p==Path.GetPathRoot(p).TrimEnd(Path.DirectorySeparatorChar))throw new IOException(T("설치 폴더가 올바르지 않습니다.","The install folder is not valid."));NoLinks(p);return p;}
  static string FindSource(){foreach(var baseDir in new[]{Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)}){string p=Path.Combine(baseDir,"AVerMedia","AVerMedia Streaming Center");if(File.Exists(Path.Combine(p,"StreamingCenter.exe")))return p;}return "";}
- // 1.8.2 (11-09 user decision): other Streaming Center versions are allowed too. 1.8.22.2 (SHA-256 above) is the tested
+ // 1.8.2 (11-09: ): other Streaming Center versions are allowed too. 1.8.22.2 (SHA-256 above) is the tested
  // build; any other StreamingCenter.exe must carry a valid Authenticode signature from AVerMedia. The plugin checks the
  // same rule when it loads (native_guard.h).
  [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)] class TrustFile{public uint cbStruct=(uint)Marshal.SizeOf(typeof(TrustFile));public string path;public IntPtr file=IntPtr.Zero,subject=IntPtr.Zero;}
@@ -107,7 +107,8 @@ static class Setup {
  }
  static void Install(string source){
   source=Root(source);CheckSource(source);Idle(source);string root=NativeRoot(source);
-  if(Directory.Exists(root)&&!Owned(root))throw new IOException(T("다른 파일이 있는 플러그인 폴더입니다. 덮어쓰지 않았습니다.","The plugin folder has other files. Nothing was overwritten."));
+  bool existed=Directory.Exists(root),done=false,keepStage=false;
+  if(existed&&!Owned(root)&&Directory.EnumerateFileSystemEntries(root).Any())throw new IOException(T("다른 파일이 있는 플러그인 폴더입니다. 덮어쓰지 않았습니다.","The plugin folder has other files. Nothing was overwritten."));
   var manifest=Manifest();var previous=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
   if(Owned(root)){
    foreach(string line in File.ReadAllLines(Child(root,"installed-files.tsv"),Encoding.UTF8)){
@@ -115,14 +116,17 @@ static class Setup {
    }
   }
   foreach(var pair in manifest){string f=Child(root,pair.Key);NoLinks(f);string prior;
-   if(File.Exists(f)&&(!previous.TryGetValue(pair.Key,out prior)||Hash(f)!=prior))throw new IOException(T("변경된 파일은 덮어쓰지 않습니다: ","Changed files are not overwritten: ")+pair.Key);
+   // A file that already equals this payload is fine too (an update that was interrupted half way can be run again).
+   if(File.Exists(f)&&Hash(f)!=pair.Value&&(!previous.TryGetValue(pair.Key,out prior)||Hash(f)!=prior))throw new IOException(T("변경된 파일은 덮어쓰지 않습니다: ","Changed files are not overwritten: ")+pair.Key);
   }
   Directory.CreateDirectory(root);string stage=Child(root,".staging-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(stage);
   var committed=new List<string>();var retired=new List<string>();
   try{
    Unpack(stage);File.WriteAllText(Child(stage,"product.txt"),Product,Encoding.UTF8);File.WriteAllText(Child(stage,"source.txt"),source,Encoding.UTF8);
    File.WriteAllLines(Child(stage,"installed-files.tsv"),manifest.Select(k=>k.Value+"\t"+k.Key),Encoding.UTF8);
-   var names=manifest.Keys.Concat(new[]{"product.txt","source.txt","installed-files.tsv"}).ToArray();
+   // First install: the records go in first, so an interrupted install is recognised and can be run again.
+   var records=new[]{"product.txt","source.txt","installed-files.tsv"};
+   var names=(previous.Count==0?records.Concat(manifest.Keys):manifest.Keys.Concat(records)).ToArray();
    foreach(string rel in names){string dest=Child(root,rel),incoming=Child(stage,rel);NoLinks(dest);Directory.CreateDirectory(Path.GetDirectoryName(dest));
     string backup=Child(stage,".backup/"+rel);Directory.CreateDirectory(Path.GetDirectoryName(backup));
     if(File.Exists(dest))File.Replace(incoming,dest,backup);else File.Move(incoming,dest);committed.Add(rel);
@@ -133,12 +137,17 @@ static class Setup {
     string prior,dest=Child(root,rel);NoLinks(dest);if(!previous.TryGetValue(rel,out prior)||!File.Exists(dest)||Hash(dest)!=prior)continue;
     string backup=Child(stage,".retired/"+rel);Directory.CreateDirectory(Path.GetDirectoryName(backup));File.Move(dest,backup);retired.Add(rel);
    }
-   Verify(root);
-  }catch{
-   foreach(string rel in retired.AsEnumerable().Reverse()){string backup=Child(stage,".retired/"+rel);if(File.Exists(backup))File.Move(backup,Child(root,rel));}
-   foreach(string rel in committed.AsEnumerable().Reverse()){string dest=Child(root,rel),backup=Child(stage,".backup/"+rel);if(File.Exists(dest))File.Delete(dest);if(File.Exists(backup))File.Move(backup,dest);}
+   Verify(root);done=true;
+  }catch(Exception ex){
+   // Put every file back; one locked file must not stop the others, and the backups stay when something could not go back.
+   foreach(string rel in retired.AsEnumerable().Reverse())try{string backup=Child(stage,".retired/"+rel);if(File.Exists(backup))File.Move(backup,Child(root,rel));}catch(Exception){keepStage=true;}
+   foreach(string rel in committed.AsEnumerable().Reverse())try{string dest=Child(root,rel),backup=Child(stage,".backup/"+rel);if(File.Exists(dest))File.Delete(dest);if(File.Exists(backup))File.Move(backup,dest);}catch(Exception){keepStage=true;}
+   if(keepStage)throw new IOException(T("설치에 실패했고 일부 파일을 되돌리지 못했습니다. 이전 파일은 이 폴더에 남아 있습니다: ","The install failed and some files could not be put back. The previous files are kept in: ")+stage+"\r\n"+ex.Message,ex);
    throw;
-  }finally{CleanStage(stage);}
+  }finally{
+   if(!keepStage)try{CleanStage(stage);}catch(Exception){} // a leftover staging folder does not undo a finished install
+   if(!existed&&!done&&!keepStage)try{foreach(string d in Directory.GetDirectories(root,"*",SearchOption.AllDirectories).OrderByDescending(x=>x.Length))Directory.Delete(d,false);Directory.Delete(root,false);}catch(Exception){}
+  }
   // Drop folders the retired files leave empty; anything the user added keeps its folder.
   foreach(string dir in retired.Select(rel=>Path.GetDirectoryName(Child(root,rel))).Distinct(StringComparer.OrdinalIgnoreCase).OrderByDescending(d=>d.Length))
    for(string d=dir;d.Length>root.Length&&Directory.Exists(d)&&!Directory.EnumerateFileSystemEntries(d).Any();d=Path.GetDirectoryName(d)){NoLinks(d);Directory.Delete(d,false);}
@@ -167,7 +176,7 @@ static class Setup {
     bool has=parts.Any(x=>String.Equals(x,TracerName,StringComparison.OrdinalIgnoreCase));
     if(on==has)return;
     if(on)parts.Add(TracerName);else parts.RemoveAll(x=>String.Equals(x,TracerName,StringComparison.OrdinalIgnoreCase));
-    if(parts.Count==0)k.DeleteValue("GST_TRACERS",false);else k.SetValue("GST_TRACERS",String.Join(";",parts),Microsoft.Win32.RegistryValueKind.String);
+    if(parts.Count==0)k.DeleteValue("GST_TRACERS",false);else k.SetValue("GST_TRACERS",String.Join(";",parts),cur.Length>0?k.GetValueKind("GST_TRACERS"):Microsoft.Win32.RegistryValueKind.String);
    }
    Broadcast();
   }catch(Exception ex){if(on)throw new IOException(T("자동 시작 설정(GST_TRACERS)을 쓰지 못했습니다: ","Could not write the auto-start setting (GST_TRACERS): ")+ex.Message);}

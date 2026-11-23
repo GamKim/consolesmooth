@@ -85,6 +85,7 @@ typedef struct CsStageStats { double in_ms,gpu_ms,out_ms,total_ms,gpu_max_ms,tot
 CS_API int cs_live_stage_stats(void*,CsStageStats*);
 // Driver/queue line of the first worker's engine (cs_gpu_info); empty until a worker has created its engine.
 CS_API const char* cs_live_gpu_info(void*);
+CS_API const char* cs_live_error(void*); /* reason after ready == -1, else "" */
 CS_API void cs_live_destroy(void*);
 // Diagnostic only, call on the producer thread after a generated output.
 CS_API int cs_live_copy_proof(void*,uint8_t*,uint8_t*,uint8_t*,float*);

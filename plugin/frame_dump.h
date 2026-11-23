@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT
- * Test only (Claude's checks, 11-09): CS_TEST_DUMP_DIR=<folder> saves the next CS_TEST_DUMP_FRAMES (default 600) new input
+ * Test only : CS_TEST_DUMP_DIR=<folder> saves the next CS_TEST_DUMP_FRAMES (default 600) new input
  * pictures exactly as they reach the engine (BGRA, before generation) to <folder>\frames.bgra, with frames.txt
  * (width height, then one line per frame: index arrival_ns). A writer thread does the file work; when its queue is full a
  * frame is skipped and counted, never waited for. Used to study the Zelda title menu text shimmer on real capture data. */

@@ -1,4 +1,4 @@
-﻿# ConsoleSmooth 2.2.8 INTERNAL: one-click NVIDIA DLSS Frame Generation runtime (started from the model menu after the user agrees).
+﻿# ConsoleSmooth: one-click NVIDIA DLSS Frame Generation runtime (started from the model menu after the user agrees).
 # Source: the NVIDIA app's own DLSS cache on this PC (C:\ProgramData\NVIDIA\NGX\models\dlssg\versions\<newest>\files\*.bin).
 # The newest copy is checked for a valid NVIDIA signature and copied as nvngx_dlssg.dll. Nothing is downloaded.
 param([string]$Dest = (Join-Path $env:LOCALAPPDATA 'ConsoleSmooth\nvidia-dlssg'))

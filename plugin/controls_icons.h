@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /* Original vector icons rendered at 4x and downsampled for smooth outlines. */
 static void ui_icon(HDC dc,RECT rect,int kind,COLORREF color,COLORREF background){
  /* Follow the button size: toolbar buttons are sized from the host toolbar, not from ui_dpi. */

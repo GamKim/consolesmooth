@@ -111,10 +111,10 @@ struct Live {
  // generated image. Fixed HUD (health bars) over a moving background was dragged along with it (11-07 Naruto: the bar
  // changed in 3.7% of frames off, 6.9-8.1% with CS_TEST_CADENCE30).
  // 2: also blend (instead of warping) pixels next to an equal pixel whose colour changed only a little: the anti-aliased
- // edges of HUD elements mix with the moving background, so they are never exactly equal and kept wobbling (11-07 user).
+ // edges of HUD elements mix with the moving background, so they are never exactly equal and kept wobbling (11-07).
  // 4 (1.7.0): pixels unchanged for 30 source pairs in a row are HUD; within 2 px of HUD every changed pixel takes the
  // nearest original. Generated frames dragged the outer HUD edge with the background and the original pulled it back,
- // so the bar end moved back and forth (11-07 user). The count runs on the video thread, the 2 px map on its own thread.
+ // so the bar end moved back and forth (11-07). The count runs on the video thread, the 2 px map on its own thread.
  // 1.8.8: the count compares each source with the colour the pixel had when its run started, within hudTol per channel
  // (Zelda title menu text changes by 1-2 levels in 25% of source pairs: exact equality found only 49% of the text, 11-09),
  // and the count and the map run on the HUD thread (the count took 4.1 ms on the video thread and the map 10 ms, so with
@@ -209,10 +209,10 @@ struct Live {
   auto nearNew=std::make_shared<std::vector<uint8_t>>(n,0);uint8_t* o=nearNew->data();
   // 2 px dilation of (count >= 30), rows then columns, over a zero-padded row; plain loops the compiler vectorises.
   // 1.9.6: the radius is 4 px once RIFE runs quarter flow (slow GPUs, 1.9.5): its motion is coarser and dragged the
-  // background over HUD edges further than 2 px (11-10 office RX 6600, user: HUD still shakes with HUD keep on).
+  // background over HUD edges further than 2 px (11-10 RX 6600: HUD still shakes with HUD keep on).
   const int R=hudRadius.load()>=4?4:2;
   std::vector<uint8_t> pad((size_t)w+8,0);uint8_t* f=pad.data()+4;
-  // 2.2.2 (11-13 user: GTA5 help boxes break when a tree trunk passes behind them): the box's dark see-through inside is
+  // 2.2.2 (11-13: GTA5 help boxes break when a tree trunk passes behind them): the box's dark see-through inside is
   // held by the overlay rule, but every dark object passing behind restarts its run, so 150 sources never come and the
   // model drags the trunk through the letters. Its letters are plain static pixels (count 30, no overlay help). An overlay
   // run counts after 30 sources too when, within hudNearR px, at least hudNearPct % of the pixels are plain static (dense
@@ -226,7 +226,7 @@ struct Live {
    const uint8_t* fr=hudAttRun.size()==n?hudAttRun.data()+(size_t)r*w:nullptr;const int am=hudAttMin;
    const int r0=std::max(0,r-D),r1=std::min(h,r+D+1);const uint32_t* I0=nearOn?hudNearI.data()+(size_t)r0*(w+1):nullptr;const uint32_t* I1=nearOn?hudNearI.data()+(size_t)r1*(w+1):nullptr;
    auto dense=[&](int q)->bool{int q0=std::max(0,q-D),q1=std::min(w,q+D+1);uint32_t s=I1[q1]-I0[q1]-I1[q0]+I0[q0];return (uint64_t)s*100>=(uint64_t)hudNearPct*(uint32_t)((r1-r0)*(q1-q0));};
-   // 2.1.2b (11-11 user: GTA5 character's head still breaks with 30 fps smoothing): a character standing still while the
+   // 2.1.2b (11-11: GTA5 character's head still breaks with 30 fps smoothing): a character standing still while the
    // camera turns changes less than its moving surroundings, so the overlay rule (2.0.4) kept its outline in the map
    // after 30 sources and the old picture was pasted there (dots and a doubled hair line). Runs that needed the overlay
    // rule now count only after hudAttMin sources (150: 5 s at 30, 2.5 s at 60); plain static pixels still after 30.
@@ -237,7 +237,8 @@ struct Live {
    for(int k=a;k<=b;k++){const uint8_t* rr=row+(size_t)k*w;for(int q=0;q<w;q++)orow[q]|=rr[q];}}
   std::atomic_store(&hudNear,nearNew);
  }
- void hudLoop(){for(uint64_t done=0;;){Data d;{std::unique_lock<std::mutex> l(hudMutex);hudWake.wait(l,[&]{return hudPending||hudStop;});if(hudStop)return;d=std::move(hudPending);hudPending.reset();}
+ void hudLoop()noexcept{try{hudLoopBody();}catch(...){}} // out of memory: HUD protection stops, the host keeps running
+ void hudLoopBody(){for(uint64_t done=0;;){Data d;{std::unique_lock<std::mutex> l(hudMutex);hudWake.wait(l,[&]{return hudPending||hudStop;});if(hudStop)return;d=std::move(hudPending);hudPending.reset();}
   auto m0=std::chrono::steady_clock::now();hudCount1((const uint32_t*)d->data());
   if(++done%2==0)hudMap(); // the map every 2 counted sources (1.7.6)
   if(hudFill){auto map=std::atomic_load(&hudNear);if(map&&map->size()==(size_t)w*h){
@@ -263,7 +264,7 @@ struct Live {
  CsStreamStats stats{};CsLiveMetrics metrics{};
  // 1.7.8 diagnostics: stage times of the last 240 measured inferences (in, gpu, out, total ms) and when each
  // started, so the share of wall time the worker spent inferring (busy) is known. gpuInfo: driver/queue line.
- struct StageSample{double v[4];uint64_t start;};std::array<StageSample,240> stageRing{};uint64_t stageCount=0;std::string gpuInfo;
+ struct StageSample{double v[4];uint64_t start;};std::array<StageSample,240> stageRing{};uint64_t stageCount=0;std::string gpuInfo,failInfo;bool failSet=false;
  void* keeper=nullptr; // 1.7.8 GPU clock keep (settings switch), active while generation is on
  std::chrono::steady_clock::time_point wallStamp=std::chrono::steady_clock::now();
  uint64_t currentTime()const{
@@ -337,7 +338,7 @@ struct Live {
  // even display changes (186 vs 19 bad seconds). Stable above FHD keeps its native/manual buffer.
  void retune(){
   if(lowLabel&&!stable&&!modelCalibration&&calibrationMs>0){delayNs=cs_low_buffer_ns(w,h,sn,sd,tn,td,lowLabel,planDelayNs);
-   // 1.9.5: a short buffer the GPU cannot meet generates nothing (office RX 6600 Mario Kart 60->120: RIFE quarter flow
+   // 1.9.5: a short buffer the GPU cannot meet generates nothing (RX 6600 Mario Kart 60->120: RIFE quarter flow
    // 12.6 ms at 15 ms buffer 1.6% generated, at 25 ms 99.9%). Raise it only as far as the measured cost needs
    // (half an output tick + cost x1.3 + 4 ms; x1.15+2 ms gave RIFE 20.9 ms buffer, 52%), never above the plan buffer.
    // Fast GPUs (cost ~3-5 ms) keep the choice.
@@ -368,7 +369,7 @@ struct Live {
    const uint32_t* x=(const uint32_t*)a;const uint32_t* y=(const uint32_t*)b;uint32_t* o=(uint32_t*)out;const int k=(int)(phase*256+.5f);
    std::shared_ptr<std::vector<uint8_t>> nearMap=staticKeep>=4?(pin?*pin:std::atomic_load(&hudNear)):nullptr;const uint8_t* hud=nearMap&&nearMap->size()==(size_t)w*h?nearMap->data():nullptr;
    auto eq=[&](size_t i){return !((x[i]^y[i])&0x00FFFFFFu);};
-   // 2.1.2 (11-11 user: GTA5 quality mode with 30 fps smoothing "breaks"): outside the HUD map an original pixel is put
+   // 2.1.2 (11-11: GTA5 quality mode with 30 fps smoothing "breaks"): outside the HUD map an original pixel is put
    // back only where the generated pixel already agrees with it (every channel within keepAgree). Equal originals do
    // not mean nothing passed: a thin pole crossing a sky pixel between two pictures 33 ms apart left sky dots on the
    // pole, and the "within 32 + equal neighbour" rule left dark dots on moving building texture (replay of the real
@@ -440,10 +441,10 @@ struct Live {
  // skipped it, the worker fills it itself (worker fills cost 1.5 ms per generated frame on the Zelda replay).
  // 1.9.1: each fill keeps the map it was made with. The worker puts the original back over the union of the maps its two
  // inputs were filled with; it used the map current at keep time, which could be newer and smaller (a whole-screen fade
- // resets the counts), so filled ramps leaked out as full-width horizontal streaks (Switch home popup, user 11-09).
+ // resets the counts), so filled ramps leaked out as full-width horizontal streaks (Switch home popup, 11-09).
  // 1.9.2: each filled picture also gets its own source tag for the engine (bit 62 + serial). The engine caches inputs by
  // tag, so a filled copy sent under the original's id stayed cached and came back in later pairs that sent the raw
- // original (whole-screen change) or a copy filled with another map: streak frames remained in 1.9.1 (user 11-09 20:02).
+ // original (whole-screen change) or a copy filled with another map: streak frames remained in 1.9.1 (11-09 20:02).
  std::atomic<uint64_t> fillSerial{0};
  uint64_t newFillTag(){return (1ull<<62)|++fillSerial;} // bit 62: engine.cpp gives untagged calls bit 63 tags
  struct HudFillEntry{Data src;std::shared_ptr<std::vector<uint8_t>> px;std::shared_ptr<std::vector<uint8_t>> map;uint64_t tag=0;};
@@ -459,7 +460,7 @@ struct Live {
   pool.run((size_t)h,1,[&](size_t r0,size_t r1){fillRows(x,o,m,r0,r1);});
   return f.px.data();
  }
- // 2.2.2 (11-13 user: GTA5 in-game web page, letters doubled and red bars left behind when it starts to scroll; gone with
+ // 2.2.2 (11-13: GTA5 in-game web page, letters doubled and red bars left behind when it starts to scroll; gone with
  // HUD keep off, not with the fill off): the map still held the page that had stood still, so its pixels were filled before
  // generation and pasted from the nearer original after it, although the page had moved. Per 32 px block (4x smaller grey
  // copies of the two originals): when the change between them is mostly explained by a vertical or horizontal shift of up
@@ -495,7 +496,7 @@ struct Live {
  bool hudFill=true; // test only: CS_TEST_HUD_FILL=0 turns it off
  // 1.9.1: a pair where most HUD pixels change is a whole-screen change (menu fade, popup dimming the screen), not HUD over
  // a moving picture: the pair is generated without fill and without HUD keep, like HUD keep off (90% of HUD pixels changed by more than 16). With them the fade
- // snapped between the originals and showed fill streaks (Switch home popup, user 11-09). Sampled every 7th pixel.
+ // snapped between the originals and showed fill streaks (Switch home popup, 11-09). Sampled every 7th pixel.
  std::atomic<uint64_t> hudTransitions{0};
  bool hudTransition(const uint32_t* a,const uint32_t* b,const uint8_t* m)const{
   size_t n=(size_t)w*h,total=0,changed=0;
@@ -514,13 +515,7 @@ struct Live {
  void run(int workerIndex)noexcept{
   void* engine=nullptr;
   try{
-   // 1.1.4 (11-21, 9070 XT report): a failed start left no reason in the diagnostics. Worker 0 keeps the engine's error
-   // in gpuInfo (set once, never changed afterwards, like the normal line) so the plugin can log and export it.
-   engine=cs_create(model.c_str(),gpu);
-#ifndef CS_SCHEDULE_TEST
-   if(!engine&&workerIndex==0){std::string why=std::string("engine_error=")+cs_last_error();std::lock_guard<std::mutex> l(mutex);if(gpuInfo.empty())gpuInfo=why;}
-#endif
-   if(!engine)throw 1;
+   engine=cs_create(model.c_str(),gpu);if(!engine)throw 1;
    // 1.8.0: worker 0 builds the whole line and publishes it once; cs_live_gpu_info hands out its pointer, so it is never
    // changed afterwards (1.7.8/1.7.9 appended the keep result after publishing).
    std::string info;
@@ -552,9 +547,9 @@ struct Live {
    // 1.9.5 slow GPU: in low latency, RIFE whose half-size flow does not fit the generated frames per original
    // (same 80% rule as the stable floor) switches to quarter-size flow until the next mode change. Office RX 6600
    // FHD 2x: half 17-21 ms (generation 15% live), quarter 10.2 ms. Fast GPUs (5080 half ~4.6 ms) never switch.
-   bool rifeFamily=false;
+   bool rifeFamily=false,rifeModel=false;
 #ifndef CS_SCHEDULE_TEST
-   {const char* nm=cs_model_name(engine);rifeFamily=nm&&!strncmp(nm,"RIFE",4)&&!getenv("CS_TEST_NO_SLOW_FLOW");}
+   {const char* nm=cs_model_name(engine);rifeModel=nm&&!strncmp(nm,"RIFE",4);rifeFamily=rifeModel&&!getenv("CS_TEST_NO_SLOW_FLOW");}
 #endif
    auto calibrate=[&]{
     bool measure;
@@ -599,7 +594,7 @@ struct Live {
     // CS_LIVE_STABLE30=full keeps full size.
     if(flowFloor==1&&rifeFamily&&!stable30Full){bool th;{std::lock_guard<std::mutex> l(mutex);th=thirty;}
      if(th!=halfFor30){halfFor30=th;cs_set_flow_floor(engine,th?0:1);std::lock_guard<std::mutex> l(mutex);diagnostic("stable30",th,0,0,0);}}
-    // 2.2.2 (11-13 user: GTA5 text boxes and tree trunks break in fast turns): low latency at FHD runs half-size flow, and a
+    // 2.2.2 (11-13: GTA5 text boxes and tree trunks break in fast turns): low latency at FHD runs half-size flow, and a
     // 30 fps game pair (33 ms apart) leaves time for full size. Offline on the same pair: half bent the text-box letters and
     // smeared the trunk, full kept them (RIFE 4.25/4.26 looked like 4.6 full at 1.5-1.7x the time). 2x only (one picture per
     // pair); dropped for this configuration if it does not keep up (see full30Off). Off by default, CS_LIVE_FULL30=1 turns it on:
@@ -628,8 +623,8 @@ struct Live {
      }
     }
     bool ttaWant=false;{std::lock_guard<std::mutex> l(mutex);uint64_t clock=currentTime();
-     ttaWant=!ttaOff&&thirty&&!midpointOnly&&!cachedMidpoint&&ttaSingleMs>0&&job.due>clock&&(double)(job.due-clock)/1e6>ttaSingleMs*ttaK+2.0;
-     if(thirty&&!ttaOff&&!midpointOnly&&!ttaWant)++ttaSkips;}
+     ttaWant=!ttaOff&&rifeModel&&thirty&&!midpointOnly&&!cachedMidpoint&&ttaSingleMs>0&&job.due>clock&&(double)(job.due-clock)/1e6>ttaSingleMs*ttaK+2.0;
+     if(thirty&&rifeModel&&!ttaOff&&!midpointOnly&&!ttaWant)++ttaSkips;}
     lastAttempt=std::chrono::steady_clock::now();
     if(trace){std::lock_guard<std::mutex> l(mutex);uint64_t clock=currentTime();diagnostic("start",job.n,job.a.id,job.due>clock?job.due-clock:0,(uint64_t)std::lround(job.phase*1000)|(cachedMidpoint?65536:0));}
     const uint64_t inferStart=currentTime();
@@ -718,7 +713,13 @@ struct Live {
     }
     resultReady.notify_all();
    }
-  }catch(...){std::lock_guard<std::mutex> l(mutex);stats.ready=-1;++stats.failures;}
+  }catch(...){
+   // The first failing worker keeps the reason (cs_live_error), before ready turns -1 under the same lock; never changed later.
+   std::string why;
+#ifndef CS_SCHEDULE_TEST
+   try{why=cs_last_error();}catch(...){}
+#endif
+   std::lock_guard<std::mutex> l(mutex);if(!failSet){failSet=true;failInfo.swap(why);}stats.ready=-1;++stats.failures;}
   cs_destroy(engine);
  }
  int render(const uint8_t* input,uint8_t* output,uint64_t stamp){
@@ -734,11 +735,13 @@ struct Live {
   // differ from arrival time. Mixing the clocks prematurely erased ready frames.
   for(auto& r:results)if(r.valid&&time(r.n)<=lastContent){r.valid=false;r.a={};r.b={};}
   Data previous=history.empty()?Data{}:history.back().pixels;
+  const uint64_t liveEpoch=epoch; // a worker recalibration can reset() while the lock is released below
   // Full comparison prevents hash collisions and never drops a changed source.
   l.unlock();bool changed=!previous;
   if(previous){for(size_t i=0;i<bytes;i+=4096)if((*previous)[i]!=input[i]){changed=true;break;}
    if(!changed)changed=!par.equal(previous->data(),input,bytes);}
   l.lock();
+  if(epoch!=liveEpoch){l.unlock();par.copy(output,input,bytes);return 0;}
   if(changed){
    Data pixels;for(auto& p:pool)if(p&&p.use_count()==1){pixels=p;break;}
    if(!pixels)for(auto& p:pool)if(!p){p=std::make_shared<std::vector<uint8_t>>(bytes);pixels=p;break;}
@@ -786,7 +789,9 @@ struct Live {
    const size_t stride=(97*std::max<size_t>(1,bytes/(1920u*1080u*3u)))|1;
    double diff=0;size_t samples=0;if(previous)for(size_t i=0;i<bytes;i+=stride){if(channels==4&&(i&3)==3)continue; // constant alpha is not image content
     diff+=std::abs((int)(*previous)[i]-input[i]);++samples;}
-   l.lock();sourceArrival=stamp;sourceClock=sourceTime;now=sourceTime;Source b{pixels,sourceTime,++sourceId};++metrics.accepted_sources;diagnostic("source",sourceTime,index,metrics.accepted_sources,0);
+   l.lock();
+   if(epoch!=liveEpoch){l.unlock();par.copy(output,input,bytes);return 0;}
+   sourceArrival=stamp;sourceClock=sourceTime;now=sourceTime;Source b{pixels,sourceTime,++sourceId};++metrics.accepted_sources;diagnostic("source",sourceTime,index,metrics.accepted_sources,0);
    if(previous){
     Source a=history.back();uint64_t period=(uint64_t)(1000000000.0L*sd/sn);
     // A held static image remains valid up to one source period before a change.
@@ -805,7 +810,7 @@ struct Live {
       uint64_t halfTick=(uint64_t)(500000000.0L*td/tn);
       pairJobs.push_back(Job{a,b,epoch,n,b.ns+delayNs+extraNs-halfTick,(float)((double)(at-a.ns)/(b.ns-a.ns))});
      }
-     // 1.9.6 (11-10 office RX 6600, user: "30fps 보정 켜면 너무 심하게 깨짐"): a 30 fps game at 2x asks for three phases
+     // 1.9.6 (11-10 RX 6600: heavy breakup with 30 fps smoothing on): a 30 fps game at 2x asks for three phases
      // (.25/.5/.75) per 33 ms pair. RIFE (quarter flow, ~10-12 ms each) cannot make three, and the .25 phase has only about
      // 8 ms; late phases were shown in later slots, so motion went back and forth. FSR 3 is midpoint-only: .25/.75 always
      // failed and counted as repeats. When the phases do not fit in 80% of the pair (or the model has only the midpoint),
@@ -815,7 +820,7 @@ struct Live {
      // about delay + extra - half tick after b arrives = 21-24 ms), but three RIFE phases took 20-23 ms on the worker, so the
      // .75 (sometimes .25) phase expired: 73.1% generated and uneven motion (A A' M M'). The 80%-of-pair test did not see
      // the deadline. Keep every phase only when they fit before it (job time x1.15 + 3 ms start, x1.3 to come back), else .5.
-     // 2.1.5 (11-11 user: "the multiplier multiplies the game's real frames"): a 30 fps game at 2x is 60 new pictures, not
+     // 2.1.5 (11-11: "the multiplier multiplies the game's real frames"): a 30 fps game at 2x is 60 new pictures, not
      // 120. Keep only the phases at j/R of the pair (R = output/signal rate, 2x -> .5, 3x -> 1/3 and 2/3, 4x -> .25/.5/.75), so
      // each picture holds the same number of slots (even 16.7 ms at 2x instead of the 8.3/25 ms of a clipped pair).
      // CS_TEST_CADENCE_ALL=1 keeps every slot (2.0.6-2.1.4 behaviour, 30 -> 120 at 2x).
@@ -891,7 +896,7 @@ struct Live {
   Result* result=nullptr;uint64_t contentNs=std::max(sourceNs,lastContent);
   for(auto& r:results)if(r.valid&&r.epoch==epoch&&time(r.n)<=at&&time(r.n)>contentNs){result=&r;contentNs=time(r.n);}
   // 1.8.2: the wait shrinks by how long the buffer has already been held, and is skipped once it is half a tick late.
-  // 11-09 user log (1.7.9, 60->120, 15 ms buffer): during a capture/host clock-drift phase nearly every in-between tick
+  // 11-09 log (1.7.9, 60->120, 15 ms buffer): during a capture/host clock-drift phase nearly every in-between tick
   // waited 5-7.5 ms on the shared streaming thread; with the copies that exceeded the 8.33 ms tick, the backlog grew and
   // the host's catch-up dropped frames (preview 113-116 fps, FG_CPU p95 9-9.75 ms). A late buffer now shows the held
   // original at once so the thread catches up; an on-time buffer waits as before (arrival includes ~1.5-2 ms download).
@@ -951,6 +956,7 @@ extern "C" CS_API int cs_live_stage_stats(void* p,CsStageStats* out){if(!p||!out
 #endif
  // The span runs from the first start to the last start plus its own duration.
  double span=(last-first)/1e6+out->total_ms;out->busy_pct=n>1&&span>0?std::min(100.0,100.0*sum[3]/span):0;return 0;}
+extern "C" CS_API const char* cs_live_error(void* p){if(!p)return "";auto* s=static_cast<Live*>(p);std::lock_guard<std::mutex> l(s->mutex);return s->stats.ready==-1&&s->failSet?s->failInfo.c_str():"";}
 extern "C" CS_API const char* cs_live_gpu_info(void* p){if(!p)return "";auto* s=static_cast<Live*>(p);std::lock_guard<std::mutex> l(s->mutex);return s->gpuInfo.c_str();}
 // Settings window switches (1.6.9): 30 fps cadence (mode 2) and HUD keep (mode 3). Overrides the test variables.
 // 2.0.2: latency priority switch. Takes effect on the next job (re-runs the worker's flow choice).

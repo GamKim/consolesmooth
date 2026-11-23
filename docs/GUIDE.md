@@ -12,7 +12,7 @@ The installer and the settings window are in English unless your Streaming Cente
   - Tested cards: Live Gamer 4K (GC573), GC313 Pro, GC553 Pro
   - It does not work with other brands (Elgato etc.) or in OBS.
 - Your console picture already showing in the Streaming Center preview
-- **GPU**: minimum AMD Radeon RX 6600. NVIDIA Video Frame Generation and DLSS Frame Generation need RTX 40/50. On GeForce about RTX 2060 class with FSR 3, RTX 3070 / 4060 class or better with RIFE (approximate test)
+- **GPU**: minimum AMD Radeon RX 6600. NVIDIA Video Frame Generation needs NVIDIA RTX (2x and 3x checked on an RTX 3070; 4x lacks performance there), DLSS Frame Generation needs an NVIDIA RTX card that the NVIDIA driver supports for it. On GeForce about RTX 2060 class with FSR 3, RTX 3070 / 4060 class or better with RIFE (approximate test)
 - A **120 Hz or faster monitor**: on a 60 Hz monitor the generated frames can't be seen.
 - Windows x64
 
@@ -20,9 +20,9 @@ Nothing on the console (Switch, PS5) is changed. Only the captured picture on yo
 
 ## 2. Download
 
-1. Download `ConsoleSmooth-Plugin-Setup-1.1.5.exe` from the [latest release](https://github.com/GamKim/consolesmooth/releases/latest).
+1. Download `ConsoleSmooth-Plugin-Setup-1.1.6.exe` from the [latest release](https://github.com/GamKim/consolesmooth/releases/latest).
 2. The installer isn't code-signed, so Windows may show a "Windows protected your PC" warning. Click **More info → Run anyway**.
-   - If you want to check the file, compare its hash with `SHA256SUMS-1.1.5.txt` on the same page (PowerShell: `Get-FileHash <file>`).
+   - If you want to check the file, compare its hash with `SHA256SUMS-1.1.6.txt` on the same page (PowerShell: `Get-FileHash <file>`).
 
 ## 3. Install
 

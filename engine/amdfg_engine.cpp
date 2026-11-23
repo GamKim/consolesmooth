@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
-// 2.2.8 INTERNAL ONLY (CS_INTERNAL_VFG): AMD FidelityFX SDK 2.4.0 frame generation DLL (ffx-api, D3D12), offscreen.
-// engines\amdfg\cs_amdfg.dll is our code (E:\fpstest\fsr31-dx12); amd_fidelityfx_framegeneration_dx12.dll and
+// AMD FidelityFX SDK 2.4.0 frame generation DLL (ffx-api, D3D12), offscreen.
+// engines\amdfg\cs_amdfg.dll is our code (engine/amdfg/fsr31_dx12.cpp); amd_fidelityfx_framegeneration_dx12.dll and
 // amd_fidelityfx_loader_dx12.dll are AMD's signed binaries (AMD binary redistribution terms, LICENSE.md beside them).
 // 11-17 (RTX 5080): provider FSR FG 3.1.6, zero motion vectors 36.21 dB (same as our Vulkan FSR 3 with zero vectors);
 // on RX 9000 the DLL may pick its ML provider (FSR 4 FG), not measured. Midpoint only (2x).

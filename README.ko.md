@@ -35,8 +35,8 @@ AVerMedia와 관계없는 개인 프로젝트이며, AVerMedia의 프로그램�
 | RIFE 4.15 lite | RIFE 4.6보다 화질이 조금 좋고 조금 무거움 | Vulkan 지원 GPU |
 | FSR 3 | 가볍고 2배·4배 지원 | Vulkan 1.3 GPU |
 | AMD FSR 프레임 생성 | AMD 공식 프레임 생성 DLL, 가장 가벼움(2배) | DirectX 12 GPU |
-| NVIDIA Video Frame Generation | 화질 가장 좋음. 처음 고를 때 NVIDIA에서 런타임을 받습니다 | NVIDIA RTX 40/50 |
-| NVIDIA DLSS 프레임 생성 | 가벼움(2·3·4배, 3·4배는 RTX 50) | NVIDIA RTX 40/50 |
+| NVIDIA Video Frame Generation | 화질 가장 좋음. 처음 고를 때 NVIDIA에서 런타임을 받습니다 | NVIDIA RTX (RTX 3070에서 2·3배 확인) |
+| NVIDIA DLSS 프레임 생성 | 가벼움(2·3·4배, 3·4배는 RTX 50) | NVIDIA 드라이버가 지원하는 NVIDIA RTX |
 
 같은 30fps 입력으로 만든 60fps를 실제 60fps 녹화와 비교한 점수(높을수록 좋음, 스위치 2 젤다 밤 숲 701장): NVIDIA Video Frame Generation 33.22dB, RIFE 4.15 lite 33.05, RIFE 4.6 32.94, DLSS 프레임 생성 32.64, FSR 3 32.55, AMD FSR 프레임 생성 31.04.
 

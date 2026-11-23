@@ -57,14 +57,14 @@ FfxOpticalflowContext of{};FfxFrameInterpolationContext fi{};FfxOpticalflowShare
  // pairs more than 3 dB below a blend were exact copies of the newer frame; the whole video scored 30.98 dB vs 34.09 for a
  // blend. CS_TEST_FSR_NO_BLEND_FALLBACK=1 keeps the copy (A/B). sceneFallbacks counts replaced frames.
  bool blendFallback=true;uint64_t sceneFallbacks=0;
- // 2.2.2 (11-13 user: FSR 3 looks steadier, wanted at 4x): FSR 3 only makes the midpoint, so 4x halves twice. The midpoint M of
+ // 2.2.2 (11-13: FSR 3 looks steadier, wanted at 4x): FSR 3 only makes the midpoint, so 4x halves twice. The midpoint M of
  // (A,B) comes from this context (the normal A,B,C stream) and is kept for the .5 job; a second FSR 3 context is fed the
  // half-step stream A,M,B,M2,C... so its midpoints are the .25 (A,M) and .75 (M,B) pictures without a reset in between.
  // 3x has no midpoint form and stays refused. CS_TEST_FSR_NO_QUARTER=1 keeps 2x only.
  uint32_t vid=0,did=0;std::unique_ptr<SeqEngine> quarter;std::vector<uint8_t> mid;uint64_t midA=0,midB=0;bool quarterOff=false;
  bool noGame=false,ofHalf=false,renderHalf=false;Image colorHalf; // renderHalf (CS_TEST_FSR_RENDER_HALF=1): depth/game-vector passes at half size
  // 2.2.7 (11-17 test, same 30->60 video, 698 pairs): zero motion vectors scored 36.21 dB (moving areas 25.72); the optical flow
- // fed as motion vectors 38.03 (27.83), close to Veyra's DLSS FG 38.41 / FSR 3.1 38.28. A dense CPU flow reached 39.12, so the
+ // fed as motion vectors 38.03 (27.83). A dense CPU flow reached 39.12, so the
  // gain is the motion itself, not its resolution (flow cut to 8x8 blocks: 39.01). The flow runs first, its block vectors
  // (ow x oh, integer pixels) are read back, converted to half floats and uploaded, and the game-vector passes run at that
  // block size (renderSize = ow x oh), so nothing is expanded per pixel. Vectors point from the current frame to the previous
@@ -90,7 +90,7 @@ FfxOpticalflowContext of{};FfxFrameInterpolationContext fi{};FfxOpticalflowShare
    for(uint32_t i=0;i<n;i+=2)fprintf(profile,"pass,%u,%u,%u,%u,%.3f\n",i/2,csPassId[i/2],csPassX[i/2],csPassY[i/2],(q[i+1]-q[i])*tsPeriod/1e6);}
   auto d=[&](int a,int b){return (t[b]-t[a])*tsPeriod/1e6;};fprintf(profile,"%d,%.3f,%.3f,%.3f,%.3f,%.3f\n",output?1:0,d(0,1),d(1,2),d(2,3),d(3,4),d(4,5));fflush(profile);}
 
- // 11-18 internal GPU path (CS_INTERNAL_VFG): host D3D11 textures imported as Vulkan images (GENERAL layout).
+ // GPU path: host D3D11 textures imported as Vulkan images (GENERAL layout).
  struct GSlot{VkImage img=VK_NULL_HANDLE;VkDeviceMemory mem=VK_NULL_HANDLE;};GSlot gslot[8];int gslots=0;VkImage gIn=VK_NULL_HANDLE,gOut=VK_NULL_HANDLE;
  void gblit(VkImage from,VkImageLayout fl,VkImage to,VkImageLayout tl){VkImageBlit b{};b.srcSubresource=b.dstSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};
   b.srcOffsets[1]=b.dstOffsets[1]={w,h,1};vkCmdBlitImage(cb,from,fl,to,tl,1,&b,VK_FILTER_NEAREST);}
@@ -304,7 +304,7 @@ SeqEngine* cs_create_fsr3(uint32_t vendorId,uint32_t deviceId,std::string& error
 #ifdef CS_INTERNAL_VFG
 #include <vulkan/vulkan_win32.h>
 int cs_engine_family(void* p);
-// 11-18 internal GPU path: same slot API as cs_gpu_ctx_* (RIFE). The plugin's engine handle owns the FSR 3 context.
+// GPU path: same slot API as cs_gpu_ctx_* (RIFE). The plugin's engine handle owns the FSR 3 context.
 SeqEngine* cs_engine_seq(void* p);
 static thread_local std::string fsr_gpu_err;
 extern "C" __declspec(dllexport) const char* cs_fsr3_gpu_error(){return fsr_gpu_err.c_str();}

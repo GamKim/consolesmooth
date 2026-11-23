@@ -4,7 +4,7 @@
 #ifndef CS_RATE_MATH_H
 #define CS_RATE_MATH_H
 #include <stdint.h>
-/* 1.0.1 (11-13 user): 120 fps input (and 119.88) as well; the output cap stays 240, so 120 -> 240 is 2x. */
+/* 1.0.1 (11-13): 120 fps input (and 119.88) as well; the output cap stays 240, so 120 -> 240 is 2x. */
 static inline int cs_rate_valid(int source,int output){return (source==30||source==60||source==120)&&output>source&&output<=source*4&&output<=240;}
 static inline int cs_rate_delay(int source,int output,int stable){
  if(!cs_rate_valid(source,output))return 0;

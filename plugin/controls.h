@@ -30,25 +30,25 @@ static HWND ui_meter,ui_full_meter;
 static wchar_t ui_full_text[100];
 static HFONT ui_meter_font;static int ui_meter_px;
 static int ui_full_dirty;static RECT ui_full_rect;
-static int ui_show_fps=1,ui_reconcile_target,ui_fps_game; /* 1.0.1 (11-13 user): readout = input / shown by default, game / shown when ui_fps_game */
+static int ui_show_fps=1,ui_reconcile_target,ui_fps_game; /* 1.0.1 (11-13): readout = input / shown by default, game / shown when ui_fps_game */
 /* 2.0.1: full screen sharpen (bicubic upscale + adaptive sharpen in direct_present.h). Default off. */
 static int ui_sharpen;static volatile LONG direct_sharpen;
-/* 2.3.12 internal test (11-19 GTA6 home): gen_share = % of a source interval the mid frame stays on screen in the
+/* 2.3.12 (11-19 GTA6): gen_share = % of a source interval the mid frame stays on screen in the
  * low-latency view (50 = even, 25 = default); gen_sharpen = sharpen mid frames only (they are ~half as sharp). */
 static volatile LONG gen_share_pct=25,gen_sharpen;static int ui_genshort=1;
-/* 2.3.13 (11-19 user): the settings window cut text off and could not be moved or resized. Height 888 -> 1000 design px;
+/* 2.3.13 (11-19): the settings window cut text off and could not be moved or resized. Height 888 -> 1000 design px;
  * drag the title bar to move it, drag the bottom-right corner (or edges) to zoom the whole window; both remembered (ui_x, ui_y, ui_zoom). */
 static int ui_pop_moved,ui_pop_x,ui_pop_y,ui_zoom=100,ui_base_dpi=96,ui_sizing;
 #define UI_POP_H 1000
 static volatile LONG gen_hdr;static int ui_hdr; /* 2.3.13: RTX Video HDR in the full screen window (rtx_hdr.h) */
-/* 2.2.4 internal (11-14 user): display sync, full screen and window. 0 vertical sync (refresh hold, as before), 1 variable refresh
+/* 2.2.4 (11-14): display sync, full screen and window. 0 vertical sync (refresh hold, as before), 1 variable refresh
  * (present on arrival; full screen with tearing allowed so G-Sync/FreeSync can follow), 2 off (present on arrival, full screen may tear). */
 static int ui_sync;static volatile LONG direct_sync;static int direct_tearing_supported(void);
 /* 2.2.4 (11-14, friend's RX 9070 XT test: turning it on and off in full screen is awkward): a global shortcut toggles frame
  * generation like the toolbar button. Default Ctrl+Alt+F (no Windows default, not an NVIDIA/AMD overlay key); the Advanced tab
  * records another combination (Ctrl or Alt required; Backspace = no shortcut). Saved as hotkey_mods (MOD_* bits) and hotkey_vk. */
 static int ui_hot_mods=MOD_CONTROL|MOD_ALT,ui_hot_vk='F',ui_hot_capture,ui_hot_ok=-1;
-/* 2.2.0 beta (11-13 user): "저지연 보기". Our full screen window shows the picture as it arrives, also with generation off,
+/* 2.2.0 beta (11-13): "저지연 보기". Our full screen window shows the picture as it arrives, also with generation off,
  * without the preview refresh hold or output spacing; the record/stream route gets no frames (recording and streaming off). */
 static int ui_lowview;static volatile LONG low_view;static LONG test_lowview; /* 11-18 test only: CS_TEST_LOWVIEW=1 keeps the low latency view on (filming/timeline runs) */
 static int ui_record,ui_saved_record,ui_buffer,ui_saved_buffer,ui_model,ui_saved_model;
@@ -62,11 +62,13 @@ static void direct_set_label(const wchar_t *text,int on);
 static double direct_rate(void);
 /* 2.3.14 (11-21 report "지금 바로"): measured arrival -> on screen of originals on the GPU path (gpu_view.h), x10 ms, with
  * the GetTickCount64 time it was last updated; shown in the settings status line as an internal estimate. */
+static void ui_host_closing(void),ui_host_opened(void); /* tracer.c */
+static int gpu_fast_running(void); /* gpu_gen.h */
 static volatile LONG cs_lat_x10;static volatile LONG64 cs_lat_at;
 /* Bits 8-15 hold the manual stable buffer or, in low latency, a shorter buffer choice; 0 = plan buffer. */
 static int ui_buffer_bits(int stable,int manual,int low){return stable?manual:low==25?0:low;}
 static HWND ui_items[200];
-/* 1.9.8 (11-10 user): the settings are split into tabs. 0 frame generation (what is changed most: on/off, model, rate,
+/* 1.9.8 (11-10): the settings are split into tabs. 0 frame generation (what is changed most: on/off, model, rate,
  * latency, display, recommended settings), 1 FPS display and recording, 2 advanced (engine switches, diagnostics). */
 static int ui_tab;
 static int ui_tab_of(int id){
@@ -82,7 +84,7 @@ static int ui_tab_of(int id){
  * switch: 11-08 it changed neither speed nor quality on the RTX 5080 (9.96 vs 9.87 ms) or the RDNA2 iGPU (70.4 vs 71.8 ms).
  * 1.8.1: bit 4 FSR 3 acceleration (fsr_fast, default on; recreates the engine): depth/game-vector passes at half size and
  * Prepare only after a reset. Same output (hash) on the RTX 5080 and the RDNA2 iGPU; iGPU 30.1 -> 23.2 ms. */
-/* 1.8.7 (user 11-09): all four engine switches default off. */
+/* 1.8.7 (11-09): all four engine switches default off. */
 static volatile LONG engine_options=0;static int ui_cadence=0,ui_hudkeep=0,ui_gpukeep=0,ui_fsrfast=0,ui_latency=0; /* 2.0.2 ui_latency: 지연 우선 (quarter-size flow) */
 #define UI_ENGINE_BITS() ((ui_cadence?1:0)|(ui_hudkeep?2:0)|(ui_gpukeep?4:0)|(ui_fsrfast?16:0)|(ui_latency?32:0))
 /* 1.7.1: corner of the fps readout over the fullscreen preview and the direct window: 0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right. */
@@ -108,7 +110,7 @@ static wchar_t ui_font_path[32768];
 static LONG ui_requested(void){return InterlockedCompareExchange(&control_bits,0,0);}
 static int ui_output(void){return ui_mode?ui_target:ui_src*ui_mult;}
 #include <shellapi.h> /* 2.3.3: NVIDIA VFG download offer in every build */
-/* 2.2.8 INTERNAL: NVIDIA VFG runtime = %LOCALAPPDATA%\ConsoleSmooth\nvidia-vfg (one-click download) or a pip install. */
+/* NVIDIA VFG runtime = %LOCALAPPDATA%\ConsoleSmooth\nvidia-vfg (one-click download) or a pip install. */
 static int ui_vfg_runtime_ok(void){wchar_t p[MAX_PATH];DWORD n=GetEnvironmentVariableW(L"CS_VFG_DIR",p,MAX_PATH);
  if(n&&n<MAX_PATH-40){wcscat(p,L"\\NVVideoEffects.dll");if(GetFileAttributesW(p)!=INVALID_FILE_ATTRIBUTES)return 1;}
  n=GetEnvironmentVariableW(L"LOCALAPPDATA",p,MAX_PATH);if(n&&n<MAX_PATH-60){wcscat(p,L"\\ConsoleSmooth\\nvidia-vfg\\NVVideoEffects.dll");if(GetFileAttributesW(p)!=INVALID_FILE_ATTRIBUTES)return 1;}
@@ -118,23 +120,23 @@ static int ui_vfg_runtime_ok(void){wchar_t p[MAX_PATH];DWORD n=GetEnvironmentVar
  return 0;}
 static void ui_vfg_offer_download(HWND owner){
  if(ui_vfg_runtime_ok())return;
- int r=MessageBoxW(owner,ui_tr(L"NVIDIA VFG 런타임이 이 PC에 없어요.\r\n\r\nNVIDIA 공식 서버(pypi.nvidia.com)에서 nvidia-vfx 0.2.0.0을 받아 필요한 파일 5개(약 210 MB)만 설치할까요?\r\n받는 양은 약 416 MB이고, NVIDIA 서명을 확인한 뒤 %LOCALAPPDATA%\\ConsoleSmooth\\nvidia-vfg 에 넣어요.\r\n\r\nNVIDIA 라이선스가 적용돼요. '아니요'를 누르면 라이선스 페이지만 열어요.\r\n(내부 시험판 전용 기능)",
-  L"The NVIDIA VFG runtime is not on this PC.\r\n\r\nDownload nvidia-vfx 0.2.0.0 from NVIDIA (pypi.nvidia.com) and install only the 5 runtime files (~210 MB)?\r\nThe download is ~416 MB; files are checked for NVIDIA signatures and go to %LOCALAPPDATA%\\ConsoleSmooth\\nvidia-vfg.\r\n\r\nNVIDIA license terms apply. 'No' opens the license page only.\r\n(internal test build only)"),
+ int r=MessageBoxW(owner,ui_tr(L"NVIDIA VFG 런타임이 이 PC에 없어요.\r\n\r\nNVIDIA 공식 서버(pypi.nvidia.com)에서 nvidia-vfx 0.2.0.0을 받아 필요한 파일 5개(약 210 MB)만 설치할까요?\r\n받는 양은 약 416 MB이고, NVIDIA 서명을 확인한 뒤 %LOCALAPPDATA%\\ConsoleSmooth\\nvidia-vfg 에 넣어요.\r\n\r\nNVIDIA 라이선스가 적용돼요. '아니요'를 누르면 라이선스 페이지만 열어요.",
+  L"The NVIDIA VFG runtime is not on this PC.\r\n\r\nDownload nvidia-vfx 0.2.0.0 from NVIDIA (pypi.nvidia.com) and install only the 5 runtime files (~210 MB)?\r\nThe download is ~416 MB; files are checked for NVIDIA signatures and go to %LOCALAPPDATA%\\ConsoleSmooth\\nvidia-vfg.\r\n\r\nNVIDIA license terms apply. 'No' opens the license page only."),
   L"ConsoleSmooth · NVIDIA VFG",MB_YESNOCANCEL|MB_ICONINFORMATION);
  if(r==IDNO){ShellExecuteW(owner,L"open",L"https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-software-license-agreement/",NULL,NULL,SW_SHOWNORMAL);return;}
  if(r!=IDYES)return;
  wchar_t args[33000];swprintf(args,33000,L"-NoProfile -ExecutionPolicy Bypass -File \"%ls\\engines\\nvvfg\\Get-NvidiaVfg.ps1\"",engine_dir);
  HINSTANCE h=ShellExecuteW(owner,L"open",L"powershell.exe",args,NULL,SW_SHOWNORMAL);
  logline("UI_VFG_DOWNLOAD started=%d",(INT_PTR)h>32);}
-/* 2.2.8 INTERNAL: DLSS FG runtime = copy of the NVIDIA app's own DLSS cache file (nothing downloaded or shipped). */
+/* DLSS FG runtime: the installer brings nvngx_dlssg.dll; this offers a newer copy from the NVIDIA app's DLSS cache when it is missing. */
 #ifdef CS_INTERNAL_DLSSG /* 2.3.4: every build */
 static void ui_dlssg_offer(HWND owner){
  {wchar_t b[32768];swprintf(b,32768,L"%ls\\engines\\dlssg\\nvngx_dlssg.dll",engine_dir);if(GetFileAttributesW(b)!=INVALID_FILE_ATTRIBUTES)return;} /* 2.3.4: bundled */
  wchar_t p[MAX_PATH];DWORD n=GetEnvironmentVariableW(L"CS_DLSSG_DIR",p,MAX_PATH);
  if(n&&n<MAX_PATH-40){wcscat(p,L"\\nvngx_dlssg.dll");if(GetFileAttributesW(p)!=INVALID_FILE_ATTRIBUTES)return;}
  n=GetEnvironmentVariableW(L"LOCALAPPDATA",p,MAX_PATH);if(n&&n<MAX_PATH-60){wcscat(p,L"\\ConsoleSmooth\\nvidia-dlssg\\nvngx_dlssg.dll");if(GetFileAttributesW(p)!=INVALID_FILE_ATTRIBUTES)return;}
- int r=MessageBoxW(owner,ui_tr(L"DLSS 프레임 생성 파일(nvngx_dlssg.dll)이 준비되지 않았어요.\r\n\r\n이 PC의 NVIDIA 앱이 받아 둔 DLSS 파일(C:\\ProgramData\\NVIDIA\\NGX)에서 가장 새 버전을 찾아, NVIDIA 서명을 확인한 뒤 %LOCALAPPDATA%\\ConsoleSmooth\\nvidia-dlssg 에 복사할까요?\r\n인터넷에서 받지 않아요. RTX 40/50에서만 동작해요.\r\n(내부 시험판 전용 기능)",
-  L"The DLSS Frame Generation file (nvngx_dlssg.dll) is not set up.\r\n\r\nCopy the newest DLSS file the NVIDIA app keeps on this PC (C:\\ProgramData\\NVIDIA\\NGX), after an NVIDIA signature check, to %LOCALAPPDATA%\\ConsoleSmooth\\nvidia-dlssg?\r\nNothing is downloaded. RTX 40/50 only.\r\n(internal test build only)"),L"ConsoleSmooth · DLSS FG",MB_YESNO|MB_ICONINFORMATION);
+ int r=MessageBoxW(owner,ui_tr(L"DLSS 프레임 생성 파일(nvngx_dlssg.dll)이 준비되지 않았어요.\r\n\r\n이 PC의 NVIDIA 앱이 받아 둔 DLSS 파일(C:\\ProgramData\\NVIDIA\\NGX)에서 가장 새 버전을 찾아, NVIDIA 서명을 확인한 뒤 %LOCALAPPDATA%\\ConsoleSmooth\\nvidia-dlssg 에 복사할까요?\r\n인터넷에서 받지 않아요. 이 그래픽카드에서 되는지는 NVIDIA 드라이버가 정해요.",
+  L"The DLSS Frame Generation file (nvngx_dlssg.dll) is not set up.\r\n\r\nCopy the newest DLSS file the NVIDIA app keeps on this PC (C:\\ProgramData\\NVIDIA\\NGX), after an NVIDIA signature check, to %LOCALAPPDATA%\\ConsoleSmooth\\nvidia-dlssg?\r\nNothing is downloaded. The NVIDIA driver decides whether this graphics card can run it."),L"ConsoleSmooth · DLSS FG",MB_YESNO|MB_ICONINFORMATION);
  if(r!=IDYES)return;
  wchar_t args[33000];swprintf(args,33000,L"-NoProfile -ExecutionPolicy Bypass -File \"%ls\\engines\\dlssg\\Get-NvidiaDlssg.ps1\"",engine_dir);
  HINSTANCE h=ShellExecuteW(owner,L"open",L"powershell.exe",args,NULL,SW_SHOWNORMAL);
@@ -178,7 +180,7 @@ static int ui_preferences(int save){
   if(ui_lowview&&!ui_display)ui_display=1; /* and the low latency view always shows in full screen */
   InterlockedExchange(&low_view,test_lowview); /* 2.2.4: active only after the on button */
   {int c=GetPrivateProfileIntW(L"preview",L"fps_corner",1,path);InterlockedExchange(&ui_fps_corner,c>=0&&c<=3?c:1);}
-  ui_cadence=GetPrivateProfileIntW(L"preview",L"cadence30",0,path)!=0;ui_hudkeep=GetPrivateProfileIntW(L"preview",L"hud_keep",1,path)!=0; /* 1.9.6: default on (user 11-10) */
+  ui_cadence=GetPrivateProfileIntW(L"preview",L"cadence30",0,path)!=0;ui_hudkeep=GetPrivateProfileIntW(L"preview",L"hud_keep",1,path)!=0; /* 1.9.6: default on (11-10) */
   ui_gpukeep=GetPrivateProfileIntW(L"preview",L"gpu_keep",ui_primary_is_amd()?1:0,path)==1;ui_fsrfast=GetPrivateProfileIntW(L"preview",L"fsr_fast",0,path)!=0;ui_latency=GetPrivateProfileIntW(L"preview",L"latency_priority",0,path)==1;InterlockedExchange(&engine_options,UI_ENGINE_BITS());
   ui_record=GetPrivateProfileIntW(L"preview",L"record_generated",0,path)==1;
   framegen_fps=ui_src;framegen_output_fps=ui_output();auto_mode=ui_mode;auto_mult=ui_mult;auto_target=ui_target;
@@ -299,7 +301,7 @@ static void ui_draw_button(DRAWITEMSTRUCT *d){
   ui_icon(dc,icon,id==101?0:1,id==101&&(ui_requested()&1)?UI_RED:RGB(193,193,193),box);}
  else if(id==111||id==144||id==161||id==163||id==168||id==171||id==179||id==199||id==114||id==181||id==186||id==189)ui_draw_switch(dc,r,id==189?ui_fps_game:id==186?ui_lowview:id==181?ui_latency:id==179?ui_sharpen:id==199?ui_genshort:id==114?ui_hdr:id==144?ui_show_fps:id==161?ui_cadence:id==163?ui_hudkeep:id==168?ui_gpukeep:id==171?ui_fsrfast:!!(ui_requested()&1));
  else {RoundRect(dc,1,1,r.right-1,r.bottom-1,ui_px(7),ui_px(7));wchar_t text[96];GetWindowTextW(d->hwndItem,text,96);DrawTextW(dc,text,-1,&r,DT_CENTER|DT_VCENTER|DT_SINGLELINE);}
- /* 1.7.4: no focus rectangle - it drew a white box on the last clicked button and switch (user request; host buttons show none). */
+ /* 1.7.4: no focus rectangle - it drew a white box on the last clicked button and switch (host buttons show none). */
  SelectObject(dc,oldb);SelectObject(dc,oldpen);DeleteObject(b);DeleteObject(pen);
 }
 static void ui_move(HWND window,int x,int y,int w,int h){MoveWindow(window,ui_px(x),ui_px(y),ui_px(w),ui_px(h),TRUE);}
@@ -337,15 +339,15 @@ static void ui_layout(void){
  ui_move(ui_items[152],254,500,190,32);ui_move(ui_items[158],504,496,262,36);ui_move(ui_items[159],776,498,68,32);
  ui_move(ui_items[127],254,540,590,20);
  /* 1.9.8 tabs: tab 0 continues with the display choice; tabs 1 and 2 start at the top again (see ui_tab_of). */
- ui_move(ui_items[180],254,572,300,30);ui_move(ui_items[181],792,568,56,36);ui_move(ui_items[182],254,608,594,24); /* 2.0.3 (11-11 user): latency priority under the latency card */
+ ui_move(ui_items[180],254,572,300,30);ui_move(ui_items[181],792,568,56,36);ui_move(ui_items[182],254,608,594,24); /* 2.0.3 (11-11): latency priority under the latency card */
  ui_move(ui_items[153],254,664,240,30);ui_move(ui_items[154],504,658,164,42);ui_move(ui_items[155],680,658,164,42);ui_move(ui_items[156],254,708,590,24);
  ui_move(ui_items[145],254,90,200,30);ui_move(ui_items[165],560,86,200,36);ui_move(ui_items[144],792,86,56,36);
- ui_move(ui_items[146],254,124,590,40);ui_move(ui_items[183],254,168,590,24); /* 2.1.1 (11-11 user): what the readout numbers mean */
- ui_move(ui_items[188],254,202,500,30);ui_move(ui_items[189],792,198,56,36); /* 1.0.1 (11-13 user): game frame rate switch; rows below +40 */
+ ui_move(ui_items[146],254,124,590,40);ui_move(ui_items[183],254,168,590,24); /* 2.1.1 (11-11): what the readout numbers mean */
+ ui_move(ui_items[188],254,202,500,30);ui_move(ui_items[189],792,198,56,36); /* 1.0.1 (11-13): game frame rate switch; rows below +40 */
  ui_move(ui_items[178],254,358,500,30);ui_move(ui_items[179],792,354,56,36); /* 2.0.1 sharpen */
  ui_move(ui_items[185],254,430,500,30);ui_move(ui_items[186],792,426,56,36);ui_move(ui_items[187],254,466,594,44); /* 2.2.0 beta: low latency view (+40 in 2.2.1) */
  ui_move(ui_items[190],254,542,500,30);for(int i=191;i<=193;i++)ui_move(ui_items[i],254+(i-191)*202,580,190,42);ui_move(ui_items[194],254,632,594,44); /* 2.2.4: display sync */
- ui_move(ui_items[198],254,710,500,30);ui_move(ui_items[199],792,706,56,36);ui_move(ui_items[116],254,746,594,24); /* 2.3.12 (11-19 user): short mid frame switch */
+ ui_move(ui_items[198],254,710,500,30);ui_move(ui_items[199],792,706,56,36);ui_move(ui_items[116],254,746,594,24); /* 2.3.12 (11-19): short mid frame switch */
  ui_move(ui_items[148],254,258,240,30);ui_move(ui_items[149],504,252,164,42);ui_move(ui_items[150],680,252,164,42);ui_move(ui_items[151],254,302,590,24); /* 2.1.1: +26 */
  ui_move(ui_items[160],254,92,160,30);ui_move(ui_items[161],420,88,56,36);ui_move(ui_items[162],540,92,180,30);ui_move(ui_items[163],792,88,56,36);ui_move(ui_items[164],254,132,262,44); /* 2.1.8: two lines for the plain-language note */ui_move(ui_items[166],540,132,308,44); /* 11-13: two lines, when to turn it off */ /* 1.7.3: one note under each switch */
  /* 1.7.8 GPU switches row (AMD tests). */
@@ -353,13 +355,13 @@ static void ui_layout(void){
  ui_move(ui_items[170],254,300,200,30);ui_move(ui_items[171],792,296,56,36);ui_move(ui_items[172],254,336,594,24); /* 1.8.1, 2.1.8: +18 */
  ui_move(ui_items[157],254,508,300,42);ui_move(ui_items[184],254,556,594,24);
  ui_move(ui_items[195],254,612,300,30);ui_move(ui_items[196],560,608,288,42);ui_move(ui_items[197],254,658,594,40); /* 2.2.4 shortcut */
- ui_move(ui_items[113],254,396,500,30);ui_move(ui_items[114],792,392,56,36);ui_move(ui_items[115],254,432,594,44); /* 2.3.13 RTX Video HDR */ /* 2.1.8 (11-11 user): what the diagnostics button does */
+ ui_move(ui_items[113],254,396,500,30);ui_move(ui_items[114],792,392,56,36);ui_move(ui_items[115],254,432,594,44); /* 2.3.13 RTX Video HDR */ /* 2.1.8 (11-11): what the diagnostics button does */
  ui_move(ui_items[105],232,870,634,22);ui_move(ui_items[108],232,896,634,24); /* 2.3.13: +112 */
  ui_move(ui_items[174],232,936,180,42);ui_move(ui_items[143],558,936,142,42);ui_move(ui_items[112],714,936,152,42);
 }
 static void ui_tab_apply(void){
  for(int id=103;id<200;id++){int t=ui_tab_of(id);if(t<0||!ui_items[id])continue;
-  int show=t==ui_tab&&id!=111; /* 2.2.4 (11-14 user): no on/off switch in the settings window; toolbar button and shortcut only */if(id>=134&&id<=136)show=show&&!ui_mode;if(id==138||id==139||id==142)show=show&&ui_mode;
+  int show=t==ui_tab&&id!=111; /* 2.2.4 (11-14): no on/off switch in the settings window; toolbar button and shortcut only */if(id>=134&&id<=136)show=show&&!ui_mode;if(id==138||id==139||id==142)show=show&&ui_mode;
   ShowWindow(ui_items[id],show?SW_SHOW:SW_HIDE);}
  if(ui_popup)InvalidateRect(ui_popup,NULL,TRUE);
 }
@@ -564,7 +566,7 @@ static void ui_refresh(void){
  {wchar_t cornerText[32];swprintf(cornerText,32,L"%ls  ▾",ui_corner_name(ui_fps_corner));ui_text(ui_items[165],cornerText);}
  double delivered=0;int measuring=fps_snapshot(&delivered);wchar_t fpsText[400],inputText[64];
  /* 1.9.6: the slow checks count from the moment the engine is ready, not from the setting change. A model change rebuilds the
-  * engine (RIFE load + calibration on the office RX 6600 takes seconds) and its first seconds always repeat. */
+  * engine (RIFE load + calibration on the RX 6600 takes seconds) and its first seconds always repeat. */
  {static int readyWas;int readyNow=s.ready==1;if(readyNow&&!readyWas&&!InterlockedCompareExchange(&auto_gpu_slow,0,0)){ui_slow_start=GetTickCount64();ui_slow_low=0;logline("UI_SLOW_TIMER_RESTART engine_ready=1");}readyWas=readyNow;}
  ui_check_slow(bits,&detected,measuring,delivered);int slow=InterlockedCompareExchange(&auto_gpu_slow,0,0)&&detected.live;
  /* 1.9.6: game frame rate measured from changed images (30 fps game in a 60 Hz signal), shown only when clearly below the input. */
@@ -589,19 +591,19 @@ static void ui_refresh(void){
  else if(fps_no_generation(&ui_no_generation,shortfallNow,ui_counts.gen_fps,ui_counts.repeat_fps)){InterlockedExchange(&auto_gpu_slow,1);logline("GPU_SLOW fallback=1 reason=no_generation gen_fps=%.1f repeat_fps=%.1f",ui_counts.gen_fps,ui_counts.repeat_fps);}
  wchar_t outputText[100],sourceRateText[32],previewRateText[32],pictureText[64]=L"";
  double shownFps=GetTickCount64()-(ULONGLONG)InterlockedCompareExchange64(&auto_shown_at,0,0)<3000?InterlockedCompareExchange(&auto_shown_x100,0,0)/100.0:0;
- if(ui_fps_game&&detected.live&&active&&!slow&&GetTickCount64()-(ULONGLONG)InterlockedCompareExchange64(&auto_content_at,0,0)<3000&&GetTickCount64()-(ULONGLONG)InterlockedCompareExchange64(&auto_shown_at,0,0)<3000)swprintf(pictureText,64,L"%.0f / %.0f fps",contentFps,shownFps); /* 2.0.8 (11-11 user): the two real rates; 2.0.9: numbers only */
+ if(ui_fps_game&&detected.live&&active&&!slow&&GetTickCount64()-(ULONGLONG)InterlockedCompareExchange64(&auto_content_at,0,0)<3000&&GetTickCount64()-(ULONGLONG)InterlockedCompareExchange64(&auto_shown_at,0,0)<3000)swprintf(pictureText,64,L"%.0f / %.0f fps",contentFps,shownFps); /* 2.0.8 (11-11): the two real rates; 2.0.9: numbers only */
  if(detected.live&&detected.sd>0)swprintf(sourceRateText,32,L"%.0f",(double)detected.sn/detected.sd);else wcscpy(sourceRateText,L"—");
  double directRate=direct_status()==2?direct_rate():0;
  if(directRate>0)swprintf(previewRateText,32,L"%.0f",directRate);else if(measuring)swprintf(previewRateText,32,L"%.0f",delivered);else wcscpy(previewRateText,L"—");
  if(slow)wcscpy(outputText,ui_tr(L"GPU 성능 부족 · 생성 안 함",L"GPU too slow · not generating"));
- /* 2.2.4 (11-14 user): no "· 생성 부족" in the readout any more; it shows the numbers only (the settings window keeps its note). */
- /* 2.0.7 (11-11 user: the readout "59.9 / 119.9" differs from the pictures really shown): add the game frame rate (changed
+ /* 2.2.4 (11-14): no "· 생성 부족" in the readout any more; it shows the numbers only (the settings window keeps its note). */
+ /* 2.0.7 (11-11: the readout "59.9 / 119.9" differs from the pictures really shown): add the game frame rate (changed
   * images in) and the new pictures shown per second (CsShownMeter) while generating; GTA5 quality mode without 30 fps
   * smoothing reads "게임 30 → 새 화면 60", with it 120. Hidden while either is stale (still picture, under 3 s). */
  else if(detected.live&&pictureText[0])wcscpy(outputText,pictureText);
  else if(detected.live)swprintf(outputText,100,L"%ls / %ls fps",sourceRateText,previewRateText);
  else wcscpy(outputText,detected.provider?ui_tr(L"신호 없음 · 생성 안 함",L"No signal · not generating"):ui_tr(L"장치 연결 대기 · 생성 안 함",L"Waiting for device · not generating"));
- /* 1.8.6 (11-09 user): the readout drawn over the picture (our full screen, SC full screen) shows the numbers only;
+ /* 1.8.6 (11-09): the readout drawn over the picture (our full screen, SC full screen) shows the numbers only;
   * "· 생성 부족" stays on the toolbar meter. */
  wchar_t overlayText[100];wcscpy(overlayText,outputText);if(detected.live&&!slow){if(pictureText[0])wcscpy(overlayText,pictureText);else swprintf(overlayText,100,L"%ls / %ls fps",sourceRateText,previewRateText);}
  direct_set_label(overlayText,ui_show_fps&&(bits&1));
@@ -610,7 +612,7 @@ static void ui_refresh(void){
  if((active||gpuLive)&&GetTickCount64()-(ULONGLONG)InterlockedCompareExchange64(&cs_lat_at,0,0)<4000){size_t n=wcslen(fpsText);
   swprintf(fpsText+n,400-n,ui_tr(L" · 원본 도착→화면 약 %.1f ms(프로그램 안)",L" · original arrival→screen about %.1f ms (inside)"),InterlockedCompareExchange(&cs_lat_x10,0,0)/10.0);}
  ui_text(ui_items[146],fpsText);
- ui_text(ui_items[183],ui_fps_game?ui_tr(L"화면 숫자: 원본 / 지금 fps · 원본 = 게임이 1초에 바꾼 화면 · 지금 = 원본 + 생성한 장",L"Readout: original / now fps · original = game pictures/s · now = original + generated"):ui_tr(L"화면 숫자: 입력 / 지금 fps · 입력 = 캡처 신호 · 지금 = 1초에 화면에 낸 장",L"Readout: input / now fps · input = capture signal · now = frames shown per second")); /* 1.0.1 (11-13 user) */
+ ui_text(ui_items[183],ui_fps_game?ui_tr(L"화면 숫자: 원본 / 지금 fps · 원본 = 게임이 1초에 바꾼 화면 · 지금 = 원본 + 생성한 장",L"Readout: original / now fps · original = game pictures/s · now = original + generated"):ui_tr(L"화면 숫자: 입력 / 지금 fps · 입력 = 캡처 신호 · 지금 = 1초에 화면에 낸 장",L"Readout: input / now fps · input = capture signal · now = frames shown per second")); /* 1.0.1 (11-13) */
  ui_text(ui_items[129],ui_mode?ui_tr(L"목표 프레임",L"Target fps"):ui_tr(L"배수",L"Multiplier"));for(int i=134;i<=136;i++)ShowWindow(ui_items[i],ui_mode||ui_tab?SW_HIDE:SW_SHOW);
  ShowWindow(ui_items[138],ui_mode&&!ui_tab?SW_SHOW:SW_HIDE);ShowWindow(ui_items[139],ui_mode&&!ui_tab?SW_SHOW:SW_HIDE);ShowWindow(ui_items[142],ui_mode&&!ui_tab?SW_SHOW:SW_HIDE);
  wchar_t text[512];int tn=ui_mode?ui_target:detected.sn*ui_mult,td=ui_mode?1:detected.sd;CsRatePlan draft;
@@ -618,7 +620,7 @@ static void ui_refresh(void){
  // FSR 3: 2x and 4x (2.2.2: midpoint twice). Lock the unsupported choices.
  int family=cs_models[ui_model].family,engineOk=cs_model_rate_supported(ui_model,detected.live?detected.sn:ui_src,detected.live?detected.sd:1,detected.live?tn:ui_output(),detected.live?td:1);
  if(!engineOk)valid=0;
- EnableWindow(ui_items[133],family!=3&&family!=5&&family!=6);EnableWindow(ui_items[135],family!=3&&family!=6);EnableWindow(ui_items[136],family!=6); /* 2.2.2: FSR 3 4x; 2.2.8 internal DLSS FG 2x only */
+ EnableWindow(ui_items[133],family!=3&&family!=5&&family!=6);EnableWindow(ui_items[135],family!=3&&family!=6);EnableWindow(ui_items[136],family!=6); /* 2.2.2: FSR 3 4x; 2.2.8 DLSS FG 2x only */
  // Processing size follows the Streaming Center recording resolution (Settings > Recording), not the capture.
  int scaled=actualW&&actualH&&(actualW!=detected.width||actualH!=detected.height);
  int pixels=scaled?actualW*actualH:detected.width*detected.height;
@@ -633,11 +635,11 @@ static void ui_refresh(void){
  /* Choose the final line first: writing each candidate repaints the label and makes it flicker. */
  const wchar_t *note=slow?(ui_stable?ui_tr(L"GPU 성능 부족으로 생성을 멈췄습니다. 끄고 켜면 다시 시도합니다.",L"Generation stopped: GPU too slow. Turn it off and on to retry."):lowShort?ui_tr(L"GPU 성능 부족으로 생성을 멈췄습니다. 버퍼를 늘리면 다시 시도합니다.",L"Generation stopped: GPU too slow. Raise the buffer to retry."):ui_tr(L"GPU 성능 부족으로 생성을 멈췄습니다. 안정 우선으로 바꾸면 다시 시도합니다.",L"Generation stopped: GPU too slow. Switch to Stable to retry.")):(int64_t)pixels>1920LL*1080?ui_tr(L"FHD보다 크면 생성이 모자랄 수 있습니다 · 녹화 해상도 1920×1080 권장",L"Above FHD, generation may fall short · 1920×1080 recording recommended"):scaled?scaledHint:ui_tr(L"FHD · QHD · UHD · GPU 성능에 따라 생성량이 달라집니다.",L"FHD · QHD · UHD · generated frames depend on the GPU.");
  if(family==3&&!slow)note=ui_tr(L"FSR 3 · 2배·4배 · 빠르지만 움직임에 잔상이 생길 수 있습니다.",L"FSR 3 · 2x and 4x · fast, but motion can leave ghosting.");
- /* 1.9.7 (11-10 user, RX 6600, 30 fps source): FSR 3 shimmers around moving characters. On video it is nearly a blend
+ /* 1.9.7 (11-10, RX 6600, 30 fps source): FSR 3 shimmers around moving characters. On video it is nearly a blend
   * (ground truth 20.25 dB vs blend 19.79, RIFE 4.6 24.18), and at 30 fps input RIFE 2x has a 33 ms budget, enough on the RX 6600. */
  if(family==3&&!slow&&detected.live&&detected.sn<=35*detected.sd)note=ui_tr(L"FSR 3 · 30fps 입력에서는 RIFE 4.6이 캐릭터 주변 잔상이 더 적습니다.",L"FSR 3 · at 30fps input, RIFE 4.6 leaves less ghosting.");
  wchar_t monitorHint[160];if(detected.live&&!slow&&ui_monitor_hint(monitorHint,160,family,(detected.sn+detected.sd/2)/detected.sd,tn,td,ui_monitor_hz()))note=monitorHint;
- /* 1.8.5 (11-09 user, 4K input): processing ran at 3840x2160 because the recording resolution was 4K; RIFE took 26 ms a frame. */
+ /* 1.8.5 (11-09, 4K input): processing ran at 3840x2160 because the recording resolution was 4K; RIFE took 26 ms a frame. */
  if(ui_shortfall.warn&&!slow&&(int64_t)pixels>1920LL*1080)note=ui_tr(L"생성이 목표를 못 따라갑니다 · 녹화 해상도를 1920×1080으로 낮추세요.",L"Generation can't keep up · lower the recording resolution to 1920×1080.");
  else if(ui_shortfall.warn&&!slow)note=ui_stable?ui_tr(L"생성이 목표를 못 따라갑니다 · 목표 프레임이나 녹화 해상도를 낮추세요.",L"Generation can't keep up · lower the target fps or recording resolution."):lowShort?ui_tr(L"생성이 목표를 못 따라갑니다 · 생성 버퍼를 늘리거나 안정 우선으로 바꾸세요.",L"Generation can't keep up · raise the buffer or switch to Stable."):ui_tr(L"생성이 목표를 못 따라갑니다 · 안정 우선으로 바꾸거나 목표 프레임을 낮추세요.",L"Generation can't keep up · switch to Stable or lower the target fps.");
  /* USB cards report the frame rate chosen in the source settings, not the console's signal. */
@@ -657,7 +659,7 @@ static void ui_refresh(void){
  }else wcscpy(text,ui_tr(L"목표는 입력보다 높고 입력의 4배 이하여야 합니다.",L"Target must be above the input and at most 4× the input."));ui_text(ui_items[127],text);
  const wchar_t *state=!(bits&1)?ui_tr(L"꺼짐 · 원본 표시",L"Off · showing original"):error==-3?ui_tr(L"출력 변경 중 · 원본 표시",L"Changing output · showing original"):engine_load_reason()[0]?(vulkan_state==0?ui_tr(L"vulkan-1.dll 없음 · 그래픽 드라이버를 다시 설치하세요",L"vulkan-1.dll is missing · reinstall the graphics driver"):ui_tr(L"엔진 파일을 열 수 없음 · 다시 설치하세요",L"Engine file could not be opened · reinstall")):gpuLive&&!error?ui_tr(L"켜짐 · 빠른 방식",L"On · fast path"):error||s.ready<0?ui_tr(L"입력 또는 엔진 확인 필요",L"Check the input or engine"):s.ready==0?ui_tr(L"엔진 준비 중",L"Engine starting"):ui_tr(L"켜짐",L"On");
  if(!(bits&1))wcscpy(text,ui_tr(L"꺼짐 · 원본 표시",L"Off · showing original"));else if(!detected.provider)wcscpy(text,ui_tr(L"장치 연결 대기 · 원본 표시",L"Waiting for device · showing original"));else if(!detected.live)wcscpy(text,ui_tr(L"입력 신호 없음 · 원본 표시",L"No input signal · showing original"));else if(!detected.supported)wcscpy(text,ui_tr(L"지원 입력 확인 필요 · 원본 표시",L"Check supported input · showing original"));else swprintf(text,512,L"%.2f → %.2f fps · %ls%ls",(double)detected.sn/detected.sd,(double)detected.tn/detected.td,state,synthetic?ui_tr(L" · 합성 영상 시험",L" · synthetic video test"):L"");
- /* 2.3.18 (11-21 user): the latency belongs on this bottom status line (item 146 is not where people look). */
+ /* 2.3.18 (11-21): the latency belongs on this bottom status line (item 146 is not where people look). */
  if((bits&1)&&(active||gpuLive)&&GetTickCount64()-(ULONGLONG)InterlockedCompareExchange64(&cs_lat_at,0,0)<4000){size_t n=wcslen(text);swprintf(text+n,512-n,ui_tr(L" · 원본→화면 %.1f ms",L" · original→screen %.1f ms"),InterlockedCompareExchange(&cs_lat_x10,0,0)/10.0);}
  ui_text(ui_items[105],text);
  int rateDirty=ui_saved_mode!=ui_mode||ui_saved_mult!=ui_mult||ui_saved_target!=ui_target;
@@ -669,9 +671,14 @@ static void ui_refresh(void){
  {/* Even only when each frame holds a whole number of the primary monitor's refreshes; the phase lock does nothing otherwise. */
   DEVMODEW dm={.dmSize=sizeof dm};int hz=EnumDisplaySettingsW(NULL,ENUM_CURRENT_SETTINGS,&dm)?ui_round_hz((int)dm.dmDisplayFrequency,0):0;
   int fits=detected.live&&hz>0&&detected.tn>0&&detected.td>0&&(long long)hz*detected.td%detected.tn==0;
-  /* 1.8.6 (11-09 user decision): full screen opens even when the target does not divide the refresh rate (e.g. 120 fps on
+  /* 1.8.6 (11-09: ): full screen opens even when the target does not divide the refresh rate (e.g. 120 fps on
    * 160 Hz); frames then hold one or two refreshes in turn, so motion is a little uneven, but latency is still the shorter one. */
-  direct_ui_sync((ui_act_display||ui_act_lowview)&&detected.live&&(detected.tn>0||ui_act_lowview),ui_direct_reopen);ui_direct_reopen=0;
+  /* The fast path generates from the picture itself. When nothing can tell the input (no device state, capture sources that
+   * disagree), its full screen opens too; a device that reports "no signal" still keeps it closed. */
+  int wantFull=ui_act_display||ui_act_lowview,known=detected.live&&(detected.tn>0||ui_act_lowview);
+  int allowed=wantFull&&(known||((!detected.provider||(detected.fallback&&detected.captures>0))&&gpu_fast_running()));
+  {static int said=-1;int state=!wantFull||!(bits&1)?0:allowed?known?1:2:3;if(state!=said){said=state;if(state)logline("DIRECT_ALLOWED state=%s live=%d provider=%d fallback=%d sources=%d active=%d rate=%d/%d",state==1?"yes":state==2?"fast path, input unknown":"blocked",detected.live,detected.provider,detected.fallback,detected.sources,detected.captures,detected.sn,detected.sd);}}
+  direct_ui_sync(allowed,ui_direct_reopen);ui_direct_reopen=0;
   LONG shown=direct_status();wchar_t displayText[160];
   if(!ui_display)wcscpy(displayText,ui_stable?ui_tr(L"안정 우선은 지연이 길어 전체 화면을 권장합니다 · 창은 Streaming Center 화면 유지",L"Stable adds latency · full screen recommended · a window keeps the Streaming Center view"):ui_tr(L"Streaming Center 화면을 보며 창 이동 가능 · 전체 화면보다 지연이 깁니다",L"Movable window in Streaming Center · more latency than full screen"));
   else if(shown==-1&&ui_saved_display)wcscpy(displayText,ui_tr(L"전체 화면 표시 실패 · 창으로 표시 중 · 적용을 누르면 다시 시도합니다.",L"Full screen failed · showing a window · press Apply to retry."));
@@ -750,7 +757,7 @@ static LRESULT CALLBACK ui_slider_proc(HWND window,UINT message,WPARAM wp,LPARAM
  }
  return DefWindowProcW(window,message,wp,lp);
 }
-/* 2.2.4 (11-14 user): the settings window only chooses and saves. Choices reach the running preview when frame generation is
+/* 2.2.4 (11-14): the settings window only chooses and saves. Choices reach the running preview when frame generation is
  * turned on with the toolbar button or the shortcut: model, rate and latency, the full screen window and the low latency view.
  * Apply while generation is on keeps them pending (no window opens over the game). ui_act_*: what the running session uses. */
 static void ui_publish_saved(void){
@@ -790,7 +797,7 @@ static LRESULT CALLBACK ui_proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
  case WM_MEASUREITEM:{MEASUREITEMSTRUCT *m=(MEASUREITEMSTRUCT*)lp;if(m->CtlType==ODT_MENU){m->itemWidth=ui_px(m->itemID>=400?200:304);m->itemHeight=ui_px(42);return TRUE;}break;}
  case WM_DRAWITEM:{DRAWITEMSTRUCT* d=(DRAWITEMSTRUCT*)lp;if(d->CtlType==ODT_MENU){int item=(int)d->itemID,corner=item>=400,model=item-200,latency=item>=300&&!corner;if(!latency&&!corner&&!cs_model_valid(model))return FALSE;
   RECT r=d->rcItem;ui_fill(d->hDC,r,(d->itemState&ODS_SELECTED)?UI_HOVER:UI_BUTTON);SetBkMode(d->hDC,TRANSPARENT);SetTextColor(d->hDC,UI_TEXT);HGDIOBJ font=SelectObject(d->hDC,ui_font);
-  /* 1.7.2: the red mark of the current choice sits at the right end (user request). */
+  /* 1.7.2: the red mark of the current choice sits at the right end. */
   if(corner?ui_fps_corner==item-400:latency?ui_stable==item-300:model==ui_model){RECT bar=r;bar.left=bar.right-ui_px(3);ui_fill(d->hDC,bar,UI_RED);}r.left+=ui_px(18);
   DrawTextW(d->hDC,corner?ui_corner_name(item-400):latency?(item==301?ui_tr(L"안정 우선",L"Stable"):ui_tr(L"낮은 지연",L"Low latency")):cs_models[model].label,-1,&r,DT_SINGLELINE|DT_VCENTER);SelectObject(d->hDC,font);return TRUE;
  }ui_draw_button(d);return TRUE;}
@@ -820,7 +827,7 @@ static LRESULT CALLBACK ui_proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
    case 171:ui_fsrfast=!ui_fsrfast;ui_save_options();break;
    case 181:ui_latency=!ui_latency;ui_save_options();break;
    case 149:case 150:ui_record=id==150;break;
-   case 154:case 155:ui_display=id==155;if(ui_lowview!=ui_display){ui_lowview=ui_display;ui_save_lowview();}break; /* 2.3.15 (11-21 user): full screen turns the low latency view on, window turns it off */
+   case 154:case 155:ui_display=id==155;if(ui_lowview!=ui_display){ui_lowview=ui_display;ui_save_lowview();}break; /* 2.3.15 (11-21): full screen turns the low latency view on, window turns it off */
    case 112:ui_menu(0);SetFocus(ui_settings);return 0;
    
    case 132:case 133:ui_mode=id==133;break;
@@ -843,7 +850,7 @@ static LRESULT CALLBACK ui_proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
    case 139:case 142:{int next=ui_target+(id==139?-1:1);AutoRate a=auto_snapshot();int min=a.live?a.sn/a.sd+1:30,max=a.live?4*a.sn/a.sd:240;if(next<min)next=min;if(next>max)next=max;wchar_t text[20];swprintf(text,20,L"%d",next);SetWindowTextW(ui_items[138],text);break;}
    case 140:{HMENU menu=CreatePopupMenu();AppendMenuW(menu,MF_OWNERDRAW,300,ui_tr(L"낮은 지연",L"Low latency"));AppendMenuW(menu,MF_OWNERDRAW,301,ui_tr(L"안정 우선",L"Stable"));RECT r;GetWindowRect(ui_items[140],&r);int choice=TrackPopupMenu(menu,TPM_RETURNCMD|TPM_NONOTIFY,r.left,r.bottom,0,window,NULL);DestroyMenu(menu);if(choice==300||choice==301)ui_stable=choice==301;break;}
    case 143:if(IsWindowEnabled(ui_items[143])&&ui_preferences(1)){
-    /* 2.2.4 (11-14 user): Apply saves. While generation is off the choices are published at once (nothing on screen changes);
+    /* 2.2.4 (11-14): Apply saves. While generation is off the choices are published at once (nothing on screen changes);
      * while it is on they wait for the next turn-on with the toolbar button or the shortcut. */
     if(ui_requested()&1){ui_apply_pending=1;logline("UI_APPLY_SAVED pending=1 (takes effect at the next turn-on)");}
     else ui_publish_saved();
@@ -857,7 +864,7 @@ static LRESULT CALLBACK ui_proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
   ui_menu(0);
 #endif
   return 0;}break;
- /* 2.2.5 (11-14 user): Esc in the full screen window turns generation off, so one press of the button or shortcut opens it again. */
+ /* 2.2.5 (11-14): Esc in the full screen window turns generation off, so one press of the button or shortcut opens it again. */
  case UI_ESC_OFF:if(window==ui_panel&&(ui_requested()&1)){logline("UI_ESCAPE_OFF");SendMessageW(ui_panel,WM_COMMAND,MAKEWPARAM(101,BN_CLICKED),(LPARAM)ui_toggle);}return 0;
  case WM_HOTKEY:if(window==ui_panel&&wp==1){logline("UI_HOTKEY_PRESSED");SendMessageW(ui_panel,WM_COMMAND,MAKEWPARAM(101,BN_CLICKED),0);}return 0;
  case WM_TIMER:if(!IsWindow(ui_parent)){DestroyWindow(ui_panel);return 0;}ui_refresh();return 0;
@@ -875,7 +882,9 @@ static LRESULT CALLBACK ui_proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
    b=CreateSolidBrush(UI_LINE);FrameRect(dc,&r,b);DeleteObject(b);
    if(ui_tab==2){RECT split={ui_px(520),ui_px(92),ui_px(520)+ui_px(1),ui_px(156)};ui_fill(dc,split,RGB(70,70,70));} /* 1.7.3: divider between the 30fps and HUD columns */
   }EndPaint(window,&p);return 0;}
- case WM_DESTROY:if(window==ui_panel){UnregisterHotKey(ui_panel,1);InterlockedExchange(&auto_stopping,1);KillTimer(window,1);if(ui_tip)DestroyWindow(ui_tip);if(ui_tipwin)DestroyWindow(ui_tipwin);if(ui_tip_font)DeleteObject(ui_tip_font);if(ui_meter)DestroyWindow(ui_meter);if(ui_full_meter)DestroyWindow(ui_full_meter);if(ui_popup)DestroyWindow(ui_popup);PostQuitMessage(0);}return 0;
+ case WM_DESTROY:if(window==ui_panel){UnregisterHotKey(ui_panel,1);InterlockedExchange(&auto_stopping,1);
+  ui_host_closing();
+  KillTimer(window,1);if(ui_tip)DestroyWindow(ui_tip);if(ui_tipwin)DestroyWindow(ui_tipwin);if(ui_tip_font)DeleteObject(ui_tip_font);if(ui_meter)DestroyWindow(ui_meter);if(ui_full_meter)DestroyWindow(ui_full_meter);if(ui_popup)DestroyWindow(ui_popup);PostQuitMessage(0);}return 0;
  }return DefWindowProcW(window,message,wp,lp);
 }
 static HWND ui_child(HWND parent,const wchar_t *klass,const wchar_t *text,DWORD style,int id){HWND w=CreateWindowExW(0,klass,text,WS_CHILD|WS_VISIBLE|style,0,0,1,1,parent,(HMENU)(INT_PTR)id,GetModuleHandleW(NULL),NULL);ui_items[id]=w;return w;}
@@ -929,7 +938,7 @@ static DWORD WINAPI ui_main(void *unused){
  WNDCLASSW tip={0};tip.lpfnWndProc=ui_tip_proc;tip.hInstance=module;tip.lpszClassName=L"ConsoleSmooth.Tip";tip.hCursor=LoadCursorW(NULL,(LPCWSTR)IDC_ARROW);RegisterClassW(&tip);
  ui_tipwin=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE,tip.lpszClassName,L"",WS_POPUP,0,0,1,1,ui_parent,NULL,module,NULL);
  {wchar_t title[64];swprintf(title,64,ui_tr(L"프레임 생성 · %hs",L"Frame generation · %hs"),CS_PLUGIN_VERSION);SetWindowTextW(ui_items[120],title);} /* version in the settings title */
- ui_hot_register();ui_tab_apply();ui_dpi=0;ui_position();SetTimer(ui_panel,1,200,NULL);ui_refresh();logline("UI_ATTACHED pid=%lu style=native-large source=%d target=%d",GetCurrentProcessId(),framegen_fps,framegen_output_fps);
+ ui_hot_register();ui_tab_apply();ui_dpi=0;ui_position();SetTimer(ui_panel,1,200,NULL);ui_refresh();ui_host_opened();logline("UI_ATTACHED pid=%lu style=native-large source=%d target=%d",GetCurrentProcessId(),framegen_fps,framegen_output_fps);
 #ifdef CS_UI_PREVIEW
  ui_text(ui_items[120],ui_tr(L"프레임 생성 · 설정 미리보기",L"Frame generation · preview"));ui_menu(1);
 #endif

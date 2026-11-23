@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT
- * 1.9.8 (11-10 user, office RX 6600): "권장 설정" measures this PC's GPU with the installed engine and proposes settings.
+ * 1.9.8 (11-10, RX 6600): "권장 설정" measures this PC's GPU with the installed engine and proposes settings.
  * Timings come from the same calls the live path makes (cs_interpolate_bgra at the processing size):
  *  RIFE 4.6 at the low-latency flow size (floor 0: half from FHD) and the slow-GPU size (floor 2: quarter from FHD),
  *  FSR 3 with acceleration. Generation is paused while measuring so the live engine does not share the GPU.
@@ -68,6 +68,7 @@ static void reco_bits(LONG bits){
   logline("UI_TOGGLE enabled=%d serial=%ld qpc=%lld reason=reco",(int)(bits&1),serial,(long long)now.QuadPart);}
 }
 static CsStats reco_stats(void){CsStats s;AcquireSRWLockShared(&reco_lock);s=reco_cs;ReleaseSRWLockShared(&reco_lock);return s;}
+static int reco_engine_failed(void){AcquireSRWLockShared(&stage_lock);int bad=!strncmp(ui_gpu_info,"engine_error=",13);ReleaseSRWLockShared(&stage_lock);return bad;}
 static void reco_try(int model,double *ms,double *gen){
  *ms=-1;*gen=0;
  reco_bits((ui_requested()&~(4|(255<<8)|(255<<16)))|1|(ui_buffer_bits(0,ui_saved_buffer,25)<<8)|(model<<16));
@@ -76,7 +77,7 @@ static void reco_try(int model,double *ms,double *gen){
  AcquireSRWLockExclusive(&reco_lock);reco_group=NULL;memset(&reco_cs,0,sizeof reco_cs);ReleaseSRWLockExclusive(&reco_lock);
  AcquireSRWLockExclusive(&stage_lock);ui_stage_valid=0;ui_gpu_info[0]=0;ReleaseSRWLockExclusive(&stage_lock);
  ULONGLONG start=GetTickCount64();CsStats s=reco_stats();
- while(GetTickCount64()-start<10000&&!engine_load_reason()[0]){Sleep(100);s=reco_stats();if(s.ready==1&&s.generated+s.repeated>0)break;}
+ while(GetTickCount64()-start<10000&&!engine_load_reason()[0]&&!reco_engine_failed()){Sleep(100);s=reco_stats();if(s.ready==1&&s.generated+s.repeated>0)break;}
  if(s.ready!=1){
   /* 1.1.4 (11-21): say why in the log and on the failure page (9070 XT report had no reason). */
   char g[512];AcquireSRWLockShared(&stage_lock);memcpy(g,ui_gpu_info,sizeof g);ReleaseSRWLockShared(&stage_lock);
@@ -120,6 +121,9 @@ static void ui_reco_start(void){
  r->keep=ui_primary_vendor(0x1002)||ui_primary_vendor(0x8086); /* AMD, Intel: clocks drop between bursts (11-08/11-10) */
  /* 2.0.0: with a live capture signal, try real generation (see ui_reco_trial_worker); the timing worker stays for no signal. */
  r->trial=d.live&&d.sn>0&&d.sd>0;
+ /* 2.3.20: the live trial counts frames of the standard path only. On the fast path (full screen) it always reported
+  * "measurement failed", so there the engines are timed directly instead. */
+ if(InterlockedCompareExchange(&gpu_path_active,0,0)==1)r->trial=0;
  if(r->trial){
   r->saved_bits=ui_requested();AcquireSRWLockShared(&auto_lock);r->saved_mode=auto_mode;r->saved_mult=auto_mult;r->saved_target=auto_target;ReleaseSRWLockShared(&auto_lock);
   EnableWindow(ui_items[174],FALSE);SetWindowTextW(ui_items[174],ui_tr(L"시험 생성 중…",L"Testing…"));
@@ -133,7 +137,7 @@ static void ui_reco_start(void){
  logline("UI_RECO_START size=%dx%d rate=%.2f content=%.2f hz=%d keep=%d resume=%d",r->w,r->h,r->rate,r->content,r->hz,r->keep,r->resume);
  HANDLE t=CreateThread(NULL,0,ui_reco_worker,NULL,0,NULL);if(t)CloseHandle(t);else{InterlockedExchange(&ui_reco_busy,0);EnableWindow(ui_items[174],TRUE);SetWindowTextW(ui_items[174],ui_tr(L"권장 설정",L"Recommended"));}
 }
-/* 1.9.9 (11-10 user): the result opens in the settings window's own style instead of a Windows message box.
+/* 1.9.9 (11-10): the result opens in the settings window's own style instead of a Windows message box.
  * Two cards (measured times, recommended settings), muted notes, Apply/Cancel drawn by ui_draw_button. Modal to
  * the settings window; Esc cancels; drag by the header. Sizes in 96-dpi units through ui_px. */
 #define UI_RV_W 600
@@ -189,7 +193,7 @@ static int ui_rv_show(void){
  EnableWindow(ui_popup,TRUE);if(IsWindow(d))DestroyWindow(d);SetForegroundWindow(ui_popup);if(quit)PostQuitMessage(0);
  return ui_rv_result;
 }
-/* 2.2.4 (11-14 user): the recommendation names the GPU and checks the monitor. */
+/* 2.2.4 (11-14): the recommendation names the GPU and checks the monitor. */
 static void ui_gpu_name(wchar_t *out,int cap){DISPLAY_DEVICEW d;d.cb=sizeof d;out[0]=0;
  for(DWORD i=0;EnumDisplayDevicesW(NULL,i,&d,0);i++,d.cb=sizeof d)if(d.StateFlags&DISPLAY_DEVICE_PRIMARY_DEVICE){wcsncpy(out,d.DeviceString,cap-1);out[cap-1]=0;return;}}
 /* Variable refresh from the primary monitor's EDID (registry copy): AMD FreeSync vendor block in a CTA extension, a DisplayID
@@ -206,7 +210,7 @@ static int ui_monitor_vrr(int *lo,int *hi){
  int vrr=0;
  for(int d=54;d<=108;d+=18)if(!e[d]&&!e[d+1]&&!e[d+2]&&e[d+3]==0xFD){
   int mn=e[d+5]+((e[d+4]&3)==3?255:0),mx=e[d+6]+((e[d+4]&2)?255:0);*lo=mn;*hi=mx;
-  /* 11-14: the user's MSI 4K 160 Hz (EDID 1.3) reports 48-160 with no VRR flag; fixed monitors report narrow ranges (LG 56-75). */
+  /* 11-14: an MSI 4K 160 Hz (EDID 1.3) reports 48-160 with no VRR flag; fixed monitors report narrow ranges (LG 56-75). */
   if((e[d+10]==1&&mx-mn>=30)||(mx>=100&&mx-mn>=60))vrr=1;}
  for(DWORD b=1;b<=e[126]&&(b+1)*128<=n;b++){BYTE *x=e+b*128;
   if(x[0]==0x02){int end=x[2]>4&&x[2]<128?x[2]:4;for(int i=4;i<end;){int tag=x[i]>>5,len=x[i]&31;if(tag==3&&len>=3&&x[i+1]==0x1A&&x[i+2]==0&&x[i+3]==0)vrr=1;i+=len+1;}}
@@ -215,7 +219,7 @@ static int ui_monitor_vrr(int *lo,int *hi){
 }
 /* Result: pick the settings, show them with the measured times, apply on Yes. */
 static void ui_reco_finish(void){
- /* 1.9.9: 0.8 like the engine's own quarter-flow rule. 1.9.8 used 0.75 and on the office RX 6600 (60 fps in, quarter
+ /* 1.9.9: 0.8 like the engine's own quarter-flow rule. 1.9.8 used 0.75 and on the RX 6600 (60 fps in, quarter
   * 11.8-13.4 ms over runs while SC was generating) flipped between RIFE and FSR 3; live RIFE 2x there is 99.8% (1.9.5). */
  UiReco *r=&ui_reco;double period=1000.0/r->rate,budget=.8*period;int src=(int)(r->rate+.5),fhd=(int64_t)r->w*r->h>=1920LL*1080;
  double rife=r->quarter>0?r->quarter:r->half; /* the engine drops to quarter flow on its own when half does not fit */
@@ -253,7 +257,7 @@ static void ui_reco_finish(void){
  if(eligible&&cost>0){low=(int)ceil(500.0/out+3.0*cost+4);if(low<15)low=15;if(low>25)low=25;}
  /* 2.2.4: RIFE made it but not cleanly (95-99%): stable keeps a longer buffer instead of risking "generation short". */
  int stable=r->trial&&model==0&&r->rife_gen>0&&r->rife_gen<.99,sync=vrr==1?1:0;
- /* 2.2.2 (user 11-11: 30fps smoothing off plays much better; it stays an option): the button no longer turns it on for a 30 fps
+ /* 2.2.2 (11-11: 30fps smoothing off plays much better; it stays an option): the button no longer turns it on for a 30 fps
   * game; it only says so in the notes. */
  int game30=src>=50&&r->content>=20&&r->content<=40,cadence=0;
  UiRecoView *v=&ui_rv;memset(v,0,sizeof *v);const wchar_t *on=ui_tr(L"켬",L"On"),*off=ui_tr(L"끔",L"Off"),*fail=ui_tr(L"측정 실패",L"Failed");

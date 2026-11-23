@@ -57,11 +57,10 @@ target_include_directories(consolesmooth_engine PRIVATE "${RIFE}" "${CMAKE_CURRE
 target_link_libraries(consolesmooth_engine PRIVATE ncnn bcrypt wintrust "${VULKAN_IMPLIB}")
 add_dependencies(consolesmooth_engine vulkan_implib)
 # 2.3.3: NVIDIA VFG (runtime downloaded by the user), AMD FSR FG (AMD signed DLLs, binary license) and the GPU path are in
-# every build. DLSS FG stays internal (Build-Engine.ps1 with CS_INTERNAL=1).
+# every build, and DLSS FG since 2.3.4.
 target_sources(consolesmooth_engine PRIVATE vfg_engine.cpp amdfg_engine.cpp gpu_interop.cpp seq_gpu.cpp dlssg_engine.cpp) # 2.3.4: DLSS FG public
 target_link_libraries(consolesmooth_engine PRIVATE d3d11 dxgi)
 target_compile_definitions(consolesmooth_engine PRIVATE CS_INTERNAL_VFG=1 CS_INTERNAL_DLSSG=1)
-option(CS_INTERNAL_VFG "internal build (DLSS FG slot)" OFF)
 
 set_target_properties(consolesmooth_engine PROPERTIES PREFIX "")
 

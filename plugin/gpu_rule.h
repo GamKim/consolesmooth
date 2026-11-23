@@ -55,7 +55,7 @@ static int gpu_rule_now(int model){
  if(e==1&&v[0]==L'1')return 1;
  wchar_t path[32768];if(!gpu_rule_settings_path(path))return 0;
  int lowview=GetPrivateProfileIntW(L"preview",L"low_latency_view",0,path)==1,display=GetPrivateProfileIntW(L"preview",L"display_mode",0,path)==1;
- lowview=lowview||display; /* 2.3.15 (11-21 user): full screen always uses the low latency view */
+ lowview=lowview||display; /* 2.3.15 (11-21): full screen always uses the low latency view */
  int stable=GetPrivateProfileIntW(L"preview",L"stable",0,path)==1,mode=GetPrivateProfileIntW(L"preview",L"rate_mode",0,path)==1;
  int mult=GetPrivateProfileIntW(L"preview",L"multiplier",2,path),target=GetPrivateProfileIntW(L"preview",L"target_fps",120,path),cadence=GetPrivateProfileIntW(L"preview",L"cadence30",0,path)!=0;
  int r=gpu_rule(model,lowview,display,stable,mode,mult,target,60,cadence,gpu_rule_failed_mask());

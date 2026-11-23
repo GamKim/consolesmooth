@@ -21,6 +21,15 @@ static int gpu_probe_init(void){
  int ok=gp_n_memory&&gp_peek_memory&&gp_is_d3d11&&gp_resource&&gp_subresource&&gp_device_handle&&gp_lock&&gp_unlock;
  logline("GPU_PROBE init ok=%d",ok);return ok;
 }
+/* Wait for an event query. 0 = device lost, no query, or 2 s without an answer (a driver reset must not hang the host). */
+static int gp_wait(ID3D11DeviceContext *ctx,void *gdev,ID3D11Query *q){
+ if(!q)return 0;
+ BOOL done=FALSE;ULONGLONG start=GetTickCount64();
+ for(;;){gp_lock(gdev);HRESULT r=ctx->lpVtbl->GetData(ctx,(ID3D11Asynchronous*)q,&done,sizeof done,0);gp_unlock(gdev);
+  if(r==S_OK&&done)return 1;
+  if(FAILED(r)||GetTickCount64()-start>2000){static LONG said;if(!InterlockedExchange(&said,1))logline("GPU_WAIT failed hr=0x%08lx",(unsigned long)r);return 0;}
+  SwitchToThread();}
+}
 static int gpu_probe_buffer(void *pad,void *info,void *data){
  (void)pad;GpuProbe *g=data;void *buf=probe_buffer(info);if(!buf||buf==g->last)return 1;g->last=buf;
  if(gp_n_memory(buf)<1){g->fail++;return 1;}
@@ -54,7 +63,7 @@ static int gpu_probe_buffer(void *pad,void *info,void *data){
  ctx->lpVtbl->CopySubresourceRegion(ctx,(ID3D11Resource*)g->shared,0,0,0,0,res,sub,NULL);
  ctx->lpVtbl->End(ctx,(ID3D11Asynchronous*)g->query);ctx->lpVtbl->Flush(ctx);
  gp_unlock(g->gdev);
- BOOL done=FALSE;for(;;){gp_lock(g->gdev);HRESULT q=ctx->lpVtbl->GetData(ctx,(ID3D11Asynchronous*)g->query,&done,sizeof done,0);gp_unlock(g->gdev);if(q==S_OK&&done)break;YieldProcessor();}
+ if(!gp_wait(ctx,g->gdev,g->query))g->fail++;
  ctx->lpVtbl->Release(ctx);
  QueryPerformanceCounter(&t1);double ms=1000.0*(t1.QuadPart-t0.QuadPart)/g->freq.QuadPart;
  g->sum+=ms;if(ms>g->max)g->max=ms;g->n++;g->total++;
@@ -121,7 +130,8 @@ static int gpu_out_buffer(void *pad,void *info,void *data){
  int sample=(o->total%60)==0;if(sample)ctx->lpVtbl->End(ctx,(ID3D11Asynchronous*)g->query);
  ctx->lpVtbl->Flush(ctx);gp_unlock(g->gdev);
  QueryPerformanceCounter(&t1);
- if(sample){BOOL done=FALSE;for(;;){gp_lock(g->gdev);HRESULT q=ctx->lpVtbl->GetData(ctx,(ID3D11Asynchronous*)g->query,&done,sizeof done,0);gp_unlock(g->gdev);if(q==S_OK&&done)break;YieldProcessor();}
+ if(sample&&!gp_wait(ctx,g->gdev,g->query))sample=0;
+ if(sample){
   QueryPerformanceCounter(&t2);o->gpu_sum+=1000.0*(t2.QuadPart-t0.QuadPart)/g->freq.QuadPart;o->gn++;}
  if(rtv)rtv->lpVtbl->Release(rtv);if(c1)c1->lpVtbl->Release(c1);ctx->lpVtbl->Release(ctx);
  ((CsProbeInfo*)info)->data=out;buffer_unref(in);
@@ -132,7 +142,7 @@ static int gpu_out_buffer(void *pad,void *info,void *data){
 static void gpu_out_free(void *p){GpuOut *o=p;if(o->pool){pool_set_active(o->pool,0);object_unref(o->pool);}if(o->g.query)o->g.query->lpVtbl->Release(o->g.query);if(o->g.shared)o->g.shared->lpVtbl->Release(o->g.shared);if(o->g.dev)o->g.dev->lpVtbl->Release(o->g.dev);HeapFree(GetProcessHeap(),0,p);}
 #include "gpu_gen.h"
 static int rife_gpu;
-/* 11-18 internal: GPU low latency view (gpu_view.h) when settings.ini has the low latency view and full screen on.
+/* GPU low latency view (gpu_view.h) when settings.ini has the low latency view and full screen on.
  * CS_TEST_GPU_VIEW=1 forces it, =0 turns it off. Read once, at pipeline build. */
 static int gpu_view_wanted(void){
  static int cached=-1;if(cached>=0)return cached;wchar_t v[4];DWORD e=GetEnvironmentVariableW(L"CS_TEST_GPU_VIEW",v,4);
@@ -142,7 +152,7 @@ static int gpu_view_wanted(void){
  logline("GPU_VIEW wanted=%d",cached);return cached;
 }
 static void *gpu_out_bin(void){
- /* 2.2.8 internal: NVIDIA VFG (family 4) always runs on this GPU path (the CPU frame path is 12-17 ms per frame, too slow for 120). */
+ /* NVIDIA VFG (family 4) always runs on this GPU path (the CPU frame path is 12-17 ms per frame, too slow for 120). */
  int model=frame_force_model>=0?frame_force_model:(ui_requested()>>16)&255,vfg=cs_model_valid(model)&&cs_models[model].family==4;
  /* 11-18 test (CS_TEST_GPU_VIEW=1): RIFE models (family 0) on the GPU path too */
  /* 2.3.3: one rule decides (gpu_rule.h); VFG failed before -> CPU path too */

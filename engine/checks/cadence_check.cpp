@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Deterministic check for CS_TEST_CADENCE30 (CPU model, virtual timestamps).
 // A 60 fps game must never switch on, a 30 fps game in a 60 fps signal must, and a game that drops
 // an occasional frame must not. The switch is visible as the reported buffer (plan + one output interval).

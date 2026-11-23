@@ -10,7 +10,7 @@
   - 확인한 캡처보드: Live Gamer 4K(GC573), GC313 Pro, GC553 Pro
   - 엘가토 등 다른 회사 캡처보드나 OBS에서는 동작하지 않아요.
 - Streaming Center에서 **콘솔 화면이 미리보기에 잘 나오는 상태**
-- **그래픽카드**: 최소 AMD Radeon RX 6600. NVIDIA Video Frame Generation·DLSS 프레임 생성은 RTX 40/50. 지포스는 FSR 3 기준 RTX 2060급, RIFE 기준 RTX 3070·4060급 이상(근사 측정)
+- **그래픽카드**: 최소 AMD Radeon RX 6600. NVIDIA Video Frame Generation은 NVIDIA RTX(RTX 3070에서 2·3배 확인, 4배는 성능 부족), DLSS 프레임 생성은 NVIDIA 드라이버가 지원하는 NVIDIA RTX. 지포스는 FSR 3 기준 RTX 2060급, RIFE 기준 RTX 3070·4060급 이상(근사 측정)
 - **120Hz 이상 모니터**: 60Hz 모니터에서는 생성된 프레임이 보이지 않아요.
 - Windows x64
 
@@ -18,9 +18,9 @@
 
 ## 2. 설치 파일 받기
 
-1. [Releases](https://github.com/GamKim/consolesmooth/releases/latest) 페이지에서 `ConsoleSmooth-Plugin-Setup-1.1.5.exe`를 받아요.
+1. [Releases](https://github.com/GamKim/consolesmooth/releases/latest) 페이지에서 `ConsoleSmooth-Plugin-Setup-1.1.6.exe`를 받아요.
 2. 서명이 없는 설치 파일이라 실행하면 Windows가 "PC 보호" 경고를 띄울 수 있어요. **추가 정보 → 실행**을 누르세요.
-   - 걱정되면 같은 페이지의 `SHA256SUMS-1.1.5.txt` 값과 받은 파일의 해시를 비교해 보세요(PowerShell: `Get-FileHash 파일이름`).
+   - 걱정되면 같은 페이지의 `SHA256SUMS-1.1.6.txt` 값과 받은 파일의 해시를 비교해 보세요(PowerShell: `Get-FileHash 파일이름`).
 
 ## 3. 설치하기
 

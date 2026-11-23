@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// 11-18 INTERNAL ONLY (CS_INTERNAL_VFG): GPU-path slot API for the D3D12 offscreen frame generators
+// GPU-path slot API for the D3D12 offscreen frame generators
 // (family 5 = NVIDIA DLSS Frame Generation through cs_dlssg.dll, family 6 = AMD FidelityFX FG through cs_amdfg.dll).
 // Same calls as cs_gpu_ctx_* (RIFE) and cs_vfg_gpu_ctx_* (VFG): the plugin shares D3D11 textures by NT handle,
 // the DLL opens them in D3D12 and copies on the GPU (no CPU upload/readback). Midpoint only (2x).

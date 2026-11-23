@@ -11,12 +11,11 @@ static AutoFilter *auto_filters;
 static int auto_filter_n;
 static AutoRate auto_applied_rate;
 static int auto_capture_probe(void *pad,void *info,void *data){
- (void)info;(void)data;void *caps=current_caps(pad),*s=caps?caps_structure(caps,0):NULL;int n=0,d=1,w=0,h=0;
+ (void)info;void *caps=current_caps(pad),*s=caps?caps_structure(caps,0):NULL;int n=0,d=1,w=0,h=0;
  if(s){structure_fraction(s,"framerate",&n,&d);structure_int(s,"width",&w);structure_int(s,"height",&h);}
- if(InterlockedCompareExchange(&auto_capture_count,0,0)>1)n=0;
- auto_seen(n,d,w,h);if(caps)caps_unref(caps);return 1;
+ auto_seen(data,n,d,w,h);if(caps)caps_unref(caps);return 1;
 }
-static void auto_capture_gone(void *data){InterlockedDecrement(&auto_capture_count);device_watch_gone(data);}
+static void auto_capture_gone(void *data){InterlockedDecrement(&auto_capture_count);auto_capture_forget(data);device_watch_gone(data);}
 static void auto_watch_capture(void *pad){
  if(!interactive_ui||synthetic)return;DeviceWatch *watch=device_watch_add(pad);if(!watch)return;InterlockedIncrement(&auto_capture_count);
  if(!add_probe(pad,1<<4,auto_capture_probe,watch,auto_capture_gone))auto_capture_gone(watch);

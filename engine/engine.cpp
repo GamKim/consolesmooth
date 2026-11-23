@@ -37,7 +37,7 @@ static float want_scale(int w,int h,int floor){
  if(n==4&&!wcscmp(v,L"full"))return 1.f;if(n==4&&!wcscmp(v,L"half"))return .5f;if(n==4&&!wcscmp(v,L"0.75"))return .75f;
  if(n==4&&!wcscmp(v,L"0.25"))return .25f;if(n==5&&!wcscmp(v,L"0.375"))return .375f; // 1.9.5 test: slow GPUs (RX 6600)
  int64_t px=(int64_t)w*h;
- // 1.9.5 slow GPU (live.cpp picks it when half-size flow does not fit the 2x budget): office RX 6600, Mario Kart real
+ // 1.9.5 slow GPU (live.cpp picks it when half-size flow does not fit the 2x budget): RX 6600, Mario Kart real
  // frames, flow half 17.0 ms 24.01 dB, quarter 10.2 ms 23.10 dB (FSR 3 20.25 dB, repeat 17.95 dB).
  if(floor==2)return px>=1920LL*1080?.25f:.5f;
  if(!floor)return px>=1920LL*1080?.5f:1.f;
@@ -92,9 +92,9 @@ static bool approved(const std::wstring& path,int i){
  if(m.family==3||m.family==4||m.family==5||m.family==6)return trusted(path+L"/"+m.basename,m.param_sha256);
  return trusted(path+L"/"+m.basename+L".param",m.param_sha256)&&trusted(path+L"/"+m.basename+L".bin",m.bin_sha256);
 }
-static bool layers_off;
+static bool layers_off,layers_tried;
 static void* create_locked(const std::wstring& path,int model,int gpu){
- if(!users)ncnn::create_gpu_instance();
+ if(!users&&ncnn::create_gpu_instance()!=0){error="Vulkan instance could not be created";ncnn::destroy_gpu_instance();return nullptr;}
  int count=ncnn::get_gpu_count();
  if(gpu<0)gpu=ncnn::get_default_gpu_index();
  if(gpu<0||gpu>=count){error="No requested Vulkan GPU";if(!users)ncnn::destroy_gpu_instance();return nullptr;}
@@ -123,15 +123,20 @@ void* cs_create(const wchar_t* dir,int gpu){
   if(cs_model_valid(i)&&approved(path,i)){model=i;break;}
  if(!cs_model_valid(model)){error="Approved model missing, changed, or path too long";return nullptr;}
  std::lock_guard<std::mutex> guard(lifecycle);
- // 1.1.4 (11-21, RX 9070 XT report: RIFE and FSR 3 both failed to start): Vulkan overlay layers (RivaTuner, Overwolf,
- // Steam, Discord, ReShade ...) load into every Vulkan program and can break instance or device creation. When the
- // first start of the Vulkan instance fails, try once more with the loader's implicit layers off (this process only).
- // A PC that starts normally never reaches the retry, so nothing changes there.
+ // Vulkan overlay layers (RivaTuner, Overwolf, Steam, Discord, ReShade ...) load into every Vulkan program and can break
+ // the start. For the Vulkan models (RIFE, FSR 3), when the first start fails, try once per process with the loader's
+ // implicit layers off. The variable belongs to the whole host process: it stays only when the retry worked (later
+ // engines need it too) and is put back otherwise. A PC that starts normally never reaches the retry.
+ const int family=cs_models[model].family;
  void* e=create_locked(path,model,gpu);
- if(!e&&!users&&!layers_off){std::string first=error;layers_off=true;SetEnvironmentVariableW(L"VK_LOADER_LAYERS_DISABLE",L"~implicit~");
-  e=create_locked(path,model,gpu);
-  if(e)static_cast<Engine*>(e)->info+=" implicit_layers=off(first start failed: "+first+")";
-  else error=first+" | again without Vulkan overlay layers: "+error;}
+ if(!e&&!users&&!layers_tried&&(family==0||family==3)){
+  std::string first=error;layers_tried=true;wchar_t old[512];DWORD had=GetEnvironmentVariableW(L"VK_LOADER_LAYERS_DISABLE",old,512);
+  if(had<512){
+   SetEnvironmentVariableW(L"VK_LOADER_LAYERS_DISABLE",L"~implicit~");error.clear();e=create_locked(path,model,gpu);
+   if(e)layers_off=true;else{error=first+" | again without Vulkan overlay layers: "+error;SetEnvironmentVariableW(L"VK_LOADER_LAYERS_DISABLE",had?old:nullptr);}
+  }
+ }
+ if(e&&layers_off&&(family==0||family==3))static_cast<Engine*>(e)->info+=" implicit_layers=off";
  return e;
 }
 static int interpolate_impl(void* handle,const uint8_t* a,const uint8_t* b,int w,int h,int ch,float t,uint8_t* output,uint64_t aid,uint64_t bid){

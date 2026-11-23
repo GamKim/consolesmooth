@@ -10,7 +10,7 @@ AVerMedia 캡처보드와 **Streaming Center**를 이미 쓰고 있다면 프로
 |---|---|
 | 캡처보드 | AVerMedia. 확인한 카드: GC573, GC313 Pro, GC553 Pro. GC553G2는 아직 직접 확인하지 않았어요(같은 Streaming Center를 쓰니 동작할 가능성이 높아요). |
 | 프로그램 | AVerMedia Streaming Center 1.8.22.2 또는 1.9.19.1. OBS·RECentral에서는 동작하지 않아요. |
-| 그래픽카드 | 최소 AMD RX 6600 · 지포스 RTX 2060급(FSR 3) / RTX 3070·4060급(RIFE). NVIDIA VFG는 RTX 40/50. |
+| 그래픽카드 | 최소 AMD RX 6600 · 지포스 RTX 2060급(FSR 3) / RTX 3070·4060급(RIFE). NVIDIA VFG는 NVIDIA RTX(RTX 3070에서 2·3배 확인). |
 | 모니터 | 120Hz 이상 |
 
 ## 설치하고 켜기

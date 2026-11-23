@@ -5,7 +5,7 @@ Play with the low latency view (full screen): the picture appears about 9 to 19 
 
 Requirements
 - An AVerMedia capture card and AVerMedia Streaming Center (tested versions 1.8.22.2 and the latest 1.9.19.1, x64).
-- Graphics card: RIFE and FSR 3 need Vulkan, AMD FSR Frame Generation needs DirectX 12, NVIDIA Video Frame Generation and DLSS Frame Generation need NVIDIA RTX 40/50.
+- Graphics card: RIFE and FSR 3 need Vulkan, AMD FSR Frame Generation needs DirectX 12, NVIDIA Video Frame Generation needs NVIDIA RTX (2x and 3x checked on an RTX 3070), DLSS Frame Generation needs an NVIDIA RTX card that the NVIDIA driver supports for it.
   Minimum: AMD Radeon RX 6600 (1080p 60 fps to 120 fps), the lowest card tested.
   GeForce, from an approximate test (RTX 5080 clocked down to match each class, 11-14): FSR 3 generated fully down to
   RTX 2060 class, RIFE down to RTX 3070 / 4060 class (2070 / 3060 class 68%).
@@ -31,8 +31,8 @@ Settings (frame generation settings window)
   pictures fill it is set by 30fps smoothing (see "30fps games").
   Processing follows the Streaming Center recording resolution; the output size does not change.
 - Model (six): RIFE 4.6 (default, balance of quality and speed) / RIFE 4.15 lite (a little better, a little heavier) / FSR 3 (2x and 4x, lighter; 4x splits each gap in the middle twice, no 3x) /
-  AMD FSR Frame Generation (AMD DLL, 2x, lightest) / NVIDIA Video Frame Generation (RTX 40/50, best quality; the runtime is downloaded from NVIDIA the first time) /
-  NVIDIA DLSS Frame Generation (RTX 40/50, 2x, 3x/4x on RTX 50; the NVIDIA runtime is in the installer).
+  AMD FSR Frame Generation (AMD DLL, 2x, lightest) / NVIDIA Video Frame Generation (best quality; the runtime is downloaded from NVIDIA the first time) /
+  NVIDIA DLSS Frame Generation (2x, 3x/4x on RTX 50; the NVIDIA runtime is in the installer).
 - Latency: Low latency or Stable, and the generation buffer slider (15-25 ms). A larger buffer adds latency.
   The fast path of the low latency view (below) does not use this buffer. Recommended settings pick the buffer from a speed test.
 - 30fps smoothing (off by default): makes 30fps games "game fps × multiplier", evenly spaced (see "30fps games"). About +8 ms latency.

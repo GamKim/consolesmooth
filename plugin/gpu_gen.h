@@ -12,14 +12,14 @@
 #include "gpu_hud.h"
 #include "gpu_view.h"
 static int gpu_view_wanted(void); /* gpu_probe.h */
-/* 2.3.7 (11-18 user: recording on the GPU path saved nothing, 0-byte file). The record route found no originals: it relies on
+/* 2.3.7 (11-18: recording on the GPU path saved nothing, 0-byte file). The record route found no originals: it relies on
  * qdata the GPU path's buffers do not carry to the encoder. The GPU path now says when it generates (gpu_gen_running, for the
  * record route's generated/original choice) and marks generated output buffers with a buffer flag (flags survive copies). */
 static volatile LONG gpu_gen_running;
 #define CS_BUF_GENERATED (1u<<28) /* above GST_BUFFER_FLAG_LAST (1<<20) */
 static void cs_buf_mark(void *buffer,int generated){unsigned *flags=(unsigned*)((char*)buffer+16); /* GstMiniObject.flags */if(generated)*flags|=CS_BUF_GENERATED;else *flags&=~CS_BUF_GENERATED;}
 static int cs_buf_generated(void *buffer){return buffer&&(*(unsigned*)((char*)buffer+16)&CS_BUF_GENERATED)!=0;}
-/* 2.3.6 (11-18 user, dual monitor): after the low latency window closed, the Streaming Center preview flickered between a
+/* 2.3.6 (11-18, dual monitor): after the low latency window closed, the Streaming Center preview flickered between a
  * normal and a darker picture every frame (measured 45 vs 28 grey). The engines leave alpha < 1 in their output; the
  * full screen window ignores alpha but the host's preview blends it over black. Each generated frame's alpha is set to 1
  * on the host's device right after the engine wrote it (write mask alpha only, one draw). */
@@ -59,13 +59,13 @@ static void (*gg_ctx_destroy)(void*);static const char *(*gg_error)(void);
 static int gpu_gen_on,gpu_gen_vfg,gpu_gen_force_vfg,gpu_gen_family,gpu_gen_model;static void *(*gg_seq_create)(int,const wchar_t*,int,int,uint8_t*);static void *(*gg_vfg_create)(int,int,uint8_t*);
 typedef struct {
  GpuOut o; void *engine,*ctx; ID3D11Texture2D *tex[GV_TEX]; HANDLE nt[GV_TEX]; ID3D11Query *q[3]; /* 0-2 inputs, 3-4 engine out, 5-6 view HUD out (gpu_view.h) */
- int gv,gv_reg,hk; volatile LONG hud_k; volatile LONG64 hud_pair; /* 2.3.8: last HUD-composed view frame (tex 5/6) and its pair */ LONGLONG jarr,last_due; unsigned long long gv_skips; LONGLONG last_arr; double src_ms,lead_ms; ID3D11Query *hq;
+ int gv,gv_reg,hk; volatile LONG hud_k; volatile LONG64 hud_pair; /* 2.3.8: last HUD-composed view frame (tex 5/6) and its pair */ LONGLONG jarr,last_due; unsigned long long gv_skips; LONGLONG last_arr; double src_ms,lead_ms,step_ms[4]; unsigned step_n; ID3D11Query *hq;
  uint64_t id[3]; int cur,prev; uint64_t next_id; void *last_res; unsigned last_sub;
  HANDLE thread,wake; volatile LONG stop,busy; /* job */ int ja,jb,jout; uint64_t jaid,jbid;
  /* result */ volatile LONG ready_out; volatile LONG64 ready_pair; int out_next;
  unsigned long long ticks,gen,repeat,skipped,blocked,fail,news; double ms[3]; unsigned msn;
- void *bin; char pipe[64]; int pipe_state; ID3D11Texture2D *fp; uint32_t fpv[512];
- /* 1.1.3 (11-20 user: 3x/4x did nothing with VFG): 3x/4x on the GPU path for RIFE and NVIDIA VFG (engines that take a
+ void *bin; char pipe[64]; int pipe_state; LONG pipe_serial; ID3D11Texture2D *fp; uint32_t fpv[512];
+ /* 1.1.3 (11-20: 3x/4x did nothing with VFG): 3x/4x on the GPU path for RIFE and NVIDIA VFG (engines that take a
   * time position). The engine still writes one frame at a time into out 3/4; each one is HUD-composed or copied into
   * tex 7+3*set+i (set alternates per pair) and shown in order. 2x keeps the code path below unchanged. */
  int jm,jset,mset; volatile LONG ready_m,ready_set; int mh_set,mh_n,mh_org; LONGLONG mh_base;
@@ -96,16 +96,31 @@ static int gg_mult(void){
  int m=auto_mode?(auto_sn>0&&auto_sd>0&&(long long)auto_target*auto_sd%auto_sn==0?(int)((long long)auto_target*auto_sd/auto_sn):2):auto_mult;
  if(m<2||m>4)m=2;if(m>2&&!(gpu_gen_vfg||gpu_gen_family==0))m=2;return m;
 }
-static void gg_wait_query(GpuGen *g,ID3D11Query *q){
- ID3D11DeviceContext *ctx=NULL;g->o.g.dev->lpVtbl->GetImmediateContext(g->o.g.dev,&ctx);BOOL done=FALSE;
- for(;;){gp_lock(g->o.g.gdev);HRESULT r=ctx->lpVtbl->GetData(ctx,(ID3D11Asynchronous*)q,&done,sizeof done,0);gp_unlock(g->o.g.gdev);if(r==S_OK&&done)break;SwitchToThread();}
- ctx->lpVtbl->Release(ctx);
+static int gg_wait_query(GpuGen *g,ID3D11Query *q){
+ ID3D11DeviceContext *ctx=NULL;g->o.g.dev->lpVtbl->GetImmediateContext(g->o.g.dev,&ctx);int ok=gp_wait(ctx,g->o.g.gdev,q);
+ ctx->lpVtbl->Release(ctx);return ok;
 }
+/* The worker finishes a job in milliseconds; after a driver failure the streaming thread stops waiting for it. */
+static void gg_wait_idle(GpuGen *g){ULONGLONG start=GetTickCount64();while(g->busy&&GetTickCount64()-start<3000)SwitchToThread();}
+static int gg_old_latency(void){static int v=-1;if(v<0){wchar_t t[4];v=GetEnvironmentVariableW(L"CS_TEST_OLD_LATENCY",t,4)==1&&t[0]==L'1';}return v;}
+/* Lead = how long after a source arrives its made frame is shown: measured average plus 0.5 ms. (A margin that follows the
+ * measured spread was tried 11-23: spread 0.25-0.31 ms, no gain.) */
+static void gg_lead(GpuGen *g,double gen){g->lead_ms=0.9*g->lead_ms+0.1*(gen+0.5);if(g->lead_ms<1)g->lead_ms=1;if(g->lead_ms>10)g->lead_ms=10;}
+/* How long the made frame stays before the original follows (the original's added latency). Default 25% of a source
+ * interval: 8.3 ms at 30 fps. With variable refresh or sync off, 20% is enough as long as that is at least one refresh of
+ * the monitor (160 Hz: 6.7 ms, 144 Hz: 7.0 ms, 120 Hz stays 8.3 ms). 60 fps sources and V-Sync stay as they were. */
+static double gg_share_ms(GpuGen *g){
+ LONG pct=InterlockedCompareExchange(&gen_share_pct,0,0);double base=g->src_ms*0.01*pct;
+ if(pct==25&&g->src_ms>25&&!gg_old_latency()&&InterlockedCompareExchange(&direct_sync,0,0)&&direct_tearing&&direct_hz_mhz>0){
+  double refresh=1000000.0/direct_hz_mhz,low=g->src_ms*0.20;if(low<refresh+0.1)low=refresh+0.1;if(low<base)base=low;}
+ return base;
+}
+static double gg_ms_since(LONGLONG t0){LARGE_INTEGER t,f;QueryPerformanceCounter(&t);QueryPerformanceFrequency(&f);return 1000.0*(double)(t.QuadPart-t0)/(double)f.QuadPart;}
 static DWORD WINAPI gg_worker(void *p){
  GpuGen *g=p;
  while(WaitForSingleObject(g->wake,INFINITE)==WAIT_OBJECT_0&&!g->stop){
   if(!g->busy)continue;
-  gg_wait_query(g,g->q[g->ja]);gg_wait_query(g,g->q[g->jb]);
+  if(!gg_wait_query(g,g->q[g->ja])||!gg_wait_query(g,g->q[g->jb])){if(g->fail++<5)logline("GPU_GEN source wait failed");InterlockedExchange(&g->busy,0);continue;}
   if(g->jm>2){ /* 3x/4x: m-1 frames at i/m, each kept in tex 7+3*set+(i-1), shown as soon as it is ready */
    int m=g->jm,base=7+3*g->jset,made=0,gvon=g->gv&&InterlockedCompareExchange(&direct_gpu_feed,0,0);LONGLONG first=0,step=0;int skipMid=0;
    for(int i=1;i<m;i++){
@@ -115,9 +130,9 @@ static DWORD WINAPI gg_worker(void *p){
     ID3D11DeviceContext *ctx=NULL;g->o.g.dev->lpVtbl->GetImmediateContext(g->o.g.dev,&ctx);gp_lock(g->o.g.gdev);
     ID3D11Resource *dst=(ID3D11Resource*)g->tex[base+i-1];
     if(!(g->hud_on&&gh_compose(&g->hud,ctx,g->o.g.dev,dst,0,3+g->jout,g->jb)))ctx->lpVtbl->CopyResource(ctx,dst,(ID3D11Resource*)g->tex[3+g->jout]);else g->composed++;
-    ctx->lpVtbl->End(ctx,(ID3D11Asynchronous*)g->hq);ctx->lpVtbl->Flush(ctx);gp_unlock(g->o.g.gdev);ctx->lpVtbl->Release(ctx);gg_wait_query(g,g->hq);made=i;
+    ctx->lpVtbl->End(ctx,(ID3D11Asynchronous*)g->hq);ctx->lpVtbl->Flush(ctx);gp_unlock(g->o.g.gdev);ctx->lpVtbl->Release(ctx);if(!gg_wait_query(g,g->hq)){g->fail++;break;}made=i;
     if(gvon){LARGE_INTEGER now;QueryPerformanceCounter(&now);
-     if(i==1){double gen=1000.0*(now.QuadPart-g->jarr)/gv_freq;g->lead_ms=0.9*g->lead_ms+0.1*(gen+0.5);if(g->lead_ms<1)g->lead_ms=1;if(g->lead_ms>10)g->lead_ms=10;
+     if(i==1){double gen=1000.0*(now.QuadPart-g->jarr)/gv_freq;gg_lead(g,gen);
       LONGLONG half=(LONGLONG)(g->src_ms*0.5*gv_freq/1000),gap=(LONGLONG)(g->src_ms*0.2*gv_freq/1000);
       first=g->jarr+(LONGLONG)(g->lead_ms*gv_freq/1000);LONGLONG want=first;if(first<now.QuadPart)first=now.QuadPart;if(g->last_due&&first<g->last_due+gap)first=g->last_due+gap;
       /* each generated picture: share/50 of an even step (short frames on: half a step) */
@@ -128,16 +143,17 @@ static DWORD WINAPI gg_worker(void *p){
    if(gvon){LONGLONG orig=first?first+step*(m-1):g->jarr+(LONGLONG)((g->lead_ms+g->src_ms*0.5)*gv_freq/1000);if(skipMid)g->gv_skips++;gv_post(g->jb,orig,g->jarr,0);g->last_due=orig;}
    InterlockedExchange(&g->busy,0);continue;
   }
-  double ms[3]={0};int rc=gg_ctx_generate(g->ctx,g->ja,g->jaid,g->jb,g->jbid,3+g->jout,0.5f,ms);
+  double ms[3]={0};LARGE_INTEGER sg;g->step_ms[0]+=gg_ms_since(g->jarr);QueryPerformanceCounter(&sg);
+  int rc=gg_ctx_generate(g->ctx,g->ja,g->jaid,g->jb,g->jbid,3+g->jout,0.5f,ms);g->step_ms[1]+=gg_ms_since(sg.QuadPart);
   if(rc){g->fail++;if(g->fail<5)logline("GPU_GEN generate rc=%d %s",rc,gg_error());if(g->fail==120&&g->gen<g->fail){logline("GPU_GEN failing, CPU path next start");gpu_rule_mark_failed(gpu_gen_model);}}
   else{ga_fix(&g->alpha,g->o.g.dev,g->o.g.gdev,g->jout);for(int i=0;i<3;i++)g->ms[i]+=ms[i];g->msn++;InterlockedExchange(&g->ready_m,0);InterlockedExchange(&g->ready_out,g->jout);InterlockedExchange64(&g->ready_pair,(LONG64)g->jbid);}
   if(g->gv&&InterlockedCompareExchange(&direct_gpu_feed,0,0)){
-   int out=3+g->jout;
+   int out=3+g->jout;LARGE_INTEGER sc;QueryPerformanceCounter(&sc);
    if(!rc&&g->hud_on){ID3D11DeviceContext *ctx=NULL;g->o.g.dev->lpVtbl->GetImmediateContext(g->o.g.dev,&ctx);int k=5+g->hk;g->hk^=1;
     gp_lock(g->o.g.gdev);int composed=gh_compose(&g->hud,ctx,g->o.g.dev,(ID3D11Resource*)g->tex[k],0,3+g->jout,g->jb);if(composed){ctx->lpVtbl->End(ctx,(ID3D11Asynchronous*)g->hq);ctx->lpVtbl->Flush(ctx);}gp_unlock(g->o.g.gdev);ctx->lpVtbl->Release(ctx);
-    if(composed){gg_wait_query(g,g->hq);out=k;g->composed++;InterlockedExchange(&g->hud_k,k);InterlockedExchange64(&g->hud_pair,(LONG64)g->jbid);}}
-   LARGE_INTEGER now;QueryPerformanceCounter(&now);double gen=1000.0*(now.QuadPart-g->jarr)/gv_freq;
-   g->lead_ms=0.9*g->lead_ms+0.1*(gen+0.5);if(g->lead_ms<1)g->lead_ms=1;if(g->lead_ms>10)g->lead_ms=10;
+    if(composed&&gg_wait_query(g,g->hq)){out=k;g->composed++;InterlockedExchange(&g->hud_k,k);InterlockedExchange64(&g->hud_pair,(LONG64)g->jbid);}}
+   g->step_ms[2]+=gg_ms_since(sc.QuadPart);LARGE_INTEGER now;QueryPerformanceCounter(&now);double gen=1000.0*(now.QuadPart-g->jarr)/gv_freq;
+   gg_lead(g,gen);if(g->step_n<1000000){g->step_ms[3]+=gen;g->step_n++;}
    /* 2.3.5: the host sometimes hands sources over unevenly (gaps of ~8 and ~25 ms instead of 16.7). Then the new mid frame
     * would be due before the previous original and one of them was dropped (DLSS FG run 11-18: 90 of 600 per 10 s).
     * Keep at least 40% of half a source interval after the last original; skip the mid frame only when that pushes it
@@ -145,7 +161,7 @@ static DWORD WINAPI gg_worker(void *p){
    LONGLONG half=(LONGLONG)(g->src_ms*0.5*gv_freq/1000),gap=(LONGLONG)(g->src_ms*0.2*gv_freq/1000);
    LONGLONG mid=g->jarr+(LONGLONG)(g->lead_ms*gv_freq/1000),want=mid;if(mid<now.QuadPart)mid=now.QuadPart;
    if(g->last_due&&mid<g->last_due+gap)mid=g->last_due+gap;
-   LONGLONG share=(LONGLONG)(g->src_ms*0.01*InterlockedCompareExchange(&gen_share_pct,0,0)*gv_freq/1000);
+   LONGLONG share=(LONGLONG)(gg_share_ms(g)*gv_freq/1000);
    int skipMid=mid-want>half;LONGLONG orig=skipMid?(mid>want+half?mid:want+half):mid+share;
    if(!rc&&!skipMid)gv_post(out,mid,g->jarr,1);else if(skipMid)g->gv_skips++;
    gv_post(g->jb,orig,g->jarr,0);g->last_due=orig;
@@ -179,15 +195,15 @@ static int gg_setup(GpuGen *g,void *pad,ID3D11Resource *res,void *gdev){
   if(i>=5)continue;
   int slot=gg_ctx_import(g->ctx,g->nt[i]);if(slot!=i){logline("GPU_GEN import %d -> %d %s",i,slot,gg_error());return 0;}
  }
- D3D11_QUERY_DESC qd={D3D11_QUERY_EVENT,0};for(int i=0;i<3;i++)p->dev->lpVtbl->CreateQuery(p->dev,&qd,&g->q[i]);
+ D3D11_QUERY_DESC qd={D3D11_QUERY_EVENT,0};for(int i=0;i<3;i++)if(FAILED(p->dev->lpVtbl->CreateQuery(p->dev,&qd,&g->q[i]))){logline("GPU_GEN query failed");return 0;}
  {D3D11_TEXTURE2D_DESC f=s;f.Width=512;f.Height=1;f.Usage=D3D11_USAGE_STAGING;f.BindFlags=0;f.CPUAccessFlags=D3D11_CPU_ACCESS_READ;f.MiscFlags=0;
   if(FAILED(p->dev->lpVtbl->CreateTexture2D(p->dev,&f,NULL,&g->fp))){logline("GPU_GEN fingerprint texture failed");return 0;}}
  if(!ga_setup(&g->alpha,p->dev,g->tex+3,d.Width,d.Height)){ga_free(&g->alpha);logline("GPU_GEN alpha fix setup failed");}
  {wchar_t v[4];g->hud_on=!(GetEnvironmentVariableW(L"CS_TEST_GPU_HUD",v,4)==1&&v[0]==L'0');if(g->hud_on&&!gh_setup(&g->hud,p->dev,g->tex,d.Width,d.Height))g->hud_on=0;}
- {g->gv=gpu_view_wanted();gv_switch=g->gv;g->src_ms=1000.0/60;g->lead_ms=4;p->dev->lpVtbl->CreateQuery(p->dev,&qd,&g->hq);if(g->gv)logline("GPU_VIEW test on");}
+ {g->gv=gpu_view_wanted();gv_switch=g->gv;g->src_ms=1000.0/60;g->lead_ms=4;if(FAILED(p->dev->lpVtbl->CreateQuery(p->dev,&qd,&g->hq))){logline("GPU_GEN query failed");return 0;}if(g->gv)logline("GPU_VIEW test on");}
  g->wake=CreateEventW(NULL,FALSE,FALSE,NULL);g->thread=CreateThread(NULL,0,gg_worker,g,0,NULL);
  g->cur=g->prev=-1;g->ready_out=-1;g->hold_src=-1;
- logline("GPU_GEN setup %ux%u x%d model=%ls hud=%d",d.Width,d.Height,gg_mult(),gpu_gen_vfg?L"NVIDIA VFG (internal GPU path)":cs_models[mi].label,g->hud_on);(void)gdev;return 1;
+ logline("GPU_GEN setup %ux%u x%d model=%ls hud=%d",d.Width,d.Height,gg_mult(),gpu_gen_vfg?L"NVIDIA VFG":cs_models[mi].label,g->hud_on);(void)gdev;return 1;
 }
 static int gpu_gen_buffer(void *pad,void *info,void *data){
  GpuGen *g=data;GpuOut *o=&g->o;GpuProbe *p=&o->g;void *in=probe_buffer(info);if(!in||gp_n_memory(in)<1)return 1;
@@ -200,15 +216,19 @@ static int gpu_gen_buffer(void *pad,void *info,void *data){
  }
  if(!gpu_gen_on)return gpu_out_buffer(pad,info,o);
  /* only the large preview's pipeline generates (as the CPU path, see main_pipe); others pass through untouched */
- if(g->pipe_state!=1){
+ LONG pipeSerial=InterlockedCompareExchange(&main_pipe_serial,0,0);
+ if(g->pipe_state!=1||g->pipe_serial!=pipeSerial){
+  g->pipe_serial=pipeSerial;int wasMain=g->pipe_state==1;
   if(!g->pipe[0]&&g->bin){char *path=object_path(g->bin);if(path){char *e=strstr(path+1,"/");size_t n=e?(size_t)(e-path)+1:strlen(path);if(n>=sizeof g->pipe)n=sizeof g->pipe-1;memcpy(g->pipe,path,n);g->pipe[n]=0;mem_free(path);}}
   char known[64];AcquireSRWLockShared(&main_pipe_lock);memcpy(known,main_pipe,sizeof known);ReleaseSRWLockShared(&main_pipe_lock);
   if(!known[0]||!g->pipe[0])return 1;
   int other=strcmp(known,g->pipe)!=0;if(g->pipe_state!=(other?2:1)){g->pipe_state=other?2:1;logline("GPU_GEN role=%s pipeline=%s",other?"other":"main",g->pipe);}
+  if(other&&wasMain){ /* replaced by another pipeline: give up the full screen feed, the new one takes it */
+   InterlockedExchange(&gpu_gen_running,0);if(g->gv){gv_end();g->gv_reg=0;}}
   if(other)return 1;
  }
  {int on=!!((ui_requested()|frame_force_on)&1);
-  if(!on){InterlockedExchange(&gpu_gen_running,0);if(g->gv)gv_end();if(g->was_on){while(g->busy)SwitchToThread();g->cur=g->prev=-1;g->since_new=0;g->caught=0;g->hold_src=-1;InterlockedExchange(&g->ready_out,-1);InterlockedExchange64(&g->ready_pair,0);InterlockedExchange(&g->ready_m,0);g->mh_n=0;logline("GPU_GEN off (passthrough)");}
+  if(!on){InterlockedExchange(&gpu_gen_running,0);if(g->gv)gv_end();if(g->was_on){gg_wait_idle(g);g->cur=g->prev=-1;g->since_new=0;g->caught=0;g->hold_src=-1;InterlockedExchange(&g->ready_out,-1);InterlockedExchange64(&g->ready_pair,0);InterlockedExchange(&g->ready_m,0);g->mh_n=0;logline("GPU_GEN off (passthrough)");}
    g->was_on=0;g->offticks++;return 1;}
   if(!g->was_on){g->was_on=1;logline("GPU_GEN on");}InterlockedExchange(&gpu_gen_running,1);}
  LARGE_INTEGER t0,t1;QueryPerformanceCounter(&t0);
@@ -218,6 +238,9 @@ static int gpu_gen_buffer(void *pad,void *info,void *data){
    ctx->lpVtbl->CopySubresourceRegion(ctx,(ID3D11Resource*)g->fp,0,(UINT)k*8,0,0,res,sub,&b);}
   D3D11_MAPPED_SUBRESOURCE mp;if(SUCCEEDED(ctx->lpVtbl->Map(ctx,(ID3D11Resource*)g->fp,0,D3D11_MAP_READ,0,&mp))){isnew=memcmp(g->fpv,mp.pData,sizeof g->fpv)!=0;memcpy(g->fpv,mp.pData,sizeof g->fpv);ctx->lpVtbl->Unmap(ctx,(ID3D11Resource*)g->fp,0);}
   gp_unlock(gdev);}
+#ifdef CS_FAKE_SOURCE
+ isnew=g->ticks%CS_FAKE_SOURCE==0; /* test DLL only: a "new source" every n ticks without a signal */
+#endif
  g->last_res=res;g->last_sub=sub;g->ticks++;if(isnew)g->news++;
  int src=-1,org=-1; /* shared texture to show this tick; org = newest original of a generated pair (HUD keep) */
  int gvact=0;
@@ -230,7 +253,7 @@ static int gpu_gen_buffer(void *pad,void *info,void *data){
   g->last_arr=t0.QuadPart;
   int slot=-1;for(int i=0;i<3;i++)if(i!=g->cur&&i!=g->prev){slot=i;break;}
   /* the worker may still read the slot that is about to become free next time; wait only if it reads this one */
-  if(g->busy&&(g->ja==slot||g->jb==slot)){g->blocked++;while(g->busy)SwitchToThread();}
+  if(g->busy&&(g->ja==slot||g->jb==slot)){g->blocked++;gg_wait_idle(g);}
   gp_lock(gdev);ctx->lpVtbl->CopySubresourceRegion(ctx,(ID3D11Resource*)g->tex[slot],0,0,0,0,res,sub,NULL);
   if(g->hud_on)gh_source(&g->hud,ctx,slot);
   ctx->lpVtbl->End(ctx,(ID3D11Asynchronous*)g->q[slot]);ctx->lpVtbl->Flush(ctx);gp_unlock(gdev);
@@ -285,13 +308,17 @@ static int gpu_gen_buffer(void *pad,void *info,void *data){
  ((CsProbeInfo*)info)->data=out;buffer_unref(in);
  QueryPerformanceCounter(&t1);o->cpu_sum+=1000.0*(t1.QuadPart-t0.QuadPart)/p->freq.QuadPart;o->n++;
  if(g->ticks%1200==0){double n=g->msn?g->msn:1;
-  logline("GPU_GEN view_mid_skips=%llu alpha_fixed=%llu",g->gv_skips,g->alpha.n);logline("GPU_GEN ticks=%llu new=%llu generated=%llu repeat=%llu skipped=%llu blocked=%llu fail=%llu cuts=%llu catchups=%llu hud_composed=%llu off=%llu tick_cpu_ms=%.3f gen_copyin_ms=%.2f gen_rife_ms=%.2f gen_copyout_ms=%.2f",
+  logline("GPU_GEN view_mid_skips=%llu alpha_fixed=%llu",g->gv_skips,g->alpha.n);
+  if(g->step_n){double k=g->step_n;logline("GPU_GEN_STEPS n=%u size=%ux%u source_ready_ms=%.2f generate_ms=%.2f hud_ms=%.2f made_ms=%.2f lead_ms=%.2f refresh_mhz=%d share_ms=%.2f src_ms=%.1f",g->step_n,p->w,p->h,g->step_ms[0]/k,g->step_ms[1]/k,g->step_ms[2]/k,g->step_ms[3]/k,g->lead_ms,(int)direct_hz_mhz,gg_share_ms(g),g->src_ms);for(int i=0;i<4;i++)g->step_ms[i]=0;g->step_n=0;}logline("GPU_GEN ticks=%llu new=%llu generated=%llu repeat=%llu skipped=%llu blocked=%llu fail=%llu cuts=%llu catchups=%llu hud_composed=%llu off=%llu tick_cpu_ms=%.3f gen_copyin_ms=%.2f gen_rife_ms=%.2f gen_copyout_ms=%.2f",
    g->ticks,g->news,g->gen,g->repeat,g->skipped,g->blocked,g->fail,g->cuts,g->catchups,g->composed,g->offticks,o->n?o->cpu_sum/o->n:0,g->ms[0]/n,g->ms[1]/n,g->ms[2]/n);
   o->cpu_sum=0;o->n=0;g->ms[0]=g->ms[1]=g->ms[2]=0;g->msn=0;}
  return 1;
 }
+static int gpu_fast_running(void){return InterlockedCompareExchange(&gpu_gen_running,0,0)!=0;}
 static void gpu_gen_free(void *v){
- GpuGen *g=v;InterlockedExchange(&gpu_gen_running,0);if(g->thread){g->stop=1;SetEvent(g->wake);WaitForSingleObject(g->thread,5000);CloseHandle(g->thread);}if(g->wake)CloseHandle(g->wake);
+ GpuGen *g=v;InterlockedExchange(&gpu_gen_running,0);if(g->thread){g->stop=1;SetEvent(g->wake);int ended=WaitForSingleObject(g->thread,5000)==WAIT_OBJECT_0;CloseHandle(g->thread);
+  if(!ended){logline("GPU_GEN worker did not stop, its resources are kept");return;}} /* never free what the worker still uses */
+ if(g->wake)CloseHandle(g->wake);
  if(g->ctx)gg_ctx_destroy(g->ctx);if(g->engine)gg_destroy(g->engine);
  if(g->gv)gv_end();if(g->hq)g->hq->lpVtbl->Release(g->hq);
  for(int i=0;i<GV_TEX;i++){if(g->nt[i])CloseHandle(g->nt[i]);if(g->tex[i])g->tex[i]->lpVtbl->Release(g->tex[i]);}

@@ -10,7 +10,7 @@ If you already use an AVerMedia capture card with **AVerMedia Streaming Center**
 |---|---|
 | Capture card | AVerMedia. Tested: GC573, GC313 Pro, GC553 Pro. GC553G2 is not tested yet (it uses the same Streaming Center, so it will likely work). |
 | Software | AVerMedia Streaming Center 1.8.22.2 or 1.9.19.1. It does not work in OBS or RECentral. |
-| GPU | At least AMD RX 6600 · GeForce RTX 2060 class (FSR 3) / RTX 3070 or 4060 class (RIFE). NVIDIA Video Frame Generation needs RTX 40/50. |
+| GPU | At least AMD RX 6600 · GeForce RTX 2060 class (FSR 3) / RTX 3070 or 4060 class (RIFE). NVIDIA Video Frame Generation needs NVIDIA RTX (2x and 3x checked on an RTX 3070). |
 | Monitor | 120 Hz or higher |
 
 ## Install and turn it on

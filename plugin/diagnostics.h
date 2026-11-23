@@ -5,7 +5,7 @@
  * log lines. Nothing is sent anywhere. The user name is masked; the computer name is not collected.
  */
 #include <cpuid.h>
-#define CS_PLUGIN_VERSION "1.1.5"
+#define CS_PLUGIN_VERSION "1.1.6"
 static void diag_cpu(char out[49]){
  unsigned r[12]={0},eax,ebx,ecx,edx;out[0]=0;
  if(!__get_cpuid(0x80000000,&eax,&ebx,&ecx,&edx)||eax<0x80000004)return;
@@ -17,22 +17,28 @@ static void diag_write(HANDLE f,const char *fmt,...){
  if(n<0)return;if(n>=(int)sizeof buf)n=sizeof buf-1;DWORD written;WriteFile(f,buf,n,&written,NULL);
 }
 /* Log lines can hold profile paths. */
+/* Replace the user name and the profile folder name (any letter case) with USER. */
 static void diag_write_masked(HANDLE f,const char *line,const char *user){
- DWORD written;const char *at=line;size_t length=strlen(user);
- if(length)for(const char *hit;(hit=strstr(at,user));at=hit+length){WriteFile(f,at,(DWORD)(hit-at),&written,NULL);WriteFile(f,"USER",4,&written,NULL);}
- WriteFile(f,at,(DWORD)strlen(at),&written,NULL);WriteFile(f,"\r\n",2,&written,NULL);
+ static char profile[256];if(!profile[0]){wchar_t w[512];DWORD n=GetEnvironmentVariableW(L"USERPROFILE",w,512);const wchar_t *b=n&&n<512?wcsrchr(w,L'\\'):NULL;
+  if(!b||!b[1]||!WideCharToMultiByte(CP_UTF8,0,b+1,-1,profile,sizeof profile,NULL,NULL))strcpy(profile,"\x01");}
+ DWORD written;const char *names[2]={user,profile};
+ for(const char *at=line;*at;){const char *hit=NULL;size_t len=0;
+  for(const char *p=at;*p&&!hit;p++)for(int k=0;k<2;k++){size_t n=strlen(names[k]);if(n>1&&n>len&&!_strnicmp(p,names[k],n)){hit=p;len=n;}}
+  if(!hit){WriteFile(f,at,(DWORD)strlen(at),&written,NULL);break;}
+  WriteFile(f,at,(DWORD)(hit-at),&written,NULL);WriteFile(f,"USER",4,&written,NULL);at=hit+len;}
+ WriteFile(f,"\r\n",2,&written,NULL);
 }
 /* 1.1.4 (11-21, RX 9070 XT report): the three suspects for an engine that cannot start, in the file itself:
  * the Windows build and Insider channel, the graphics driver versions, and the Vulkan implicit layers (overlays such
  * as RivaTuner, Overwolf, Steam, Discord, ReShade load into every Vulkan program). */
 static void diag_reg_text(HKEY root,const wchar_t *key,const wchar_t *value,char *out,int cap){
  wchar_t w[512];DWORD size=sizeof w;out[0]=0;
- if(RegGetValueW(root,key,value,RRF_RT_REG_SZ,NULL,w,&size)==ERROR_SUCCESS)WideCharToMultiByte(CP_UTF8,0,w,-1,out,cap,NULL,NULL);
+ if(RegGetValueW(root,key,value,RRF_RT_REG_SZ,NULL,w,&size)==ERROR_SUCCESS){if(!WideCharToMultiByte(CP_UTF8,0,w,-1,out,cap,NULL,NULL))out[0]=0;}
  else{DWORD d=0;size=sizeof d;if(RegGetValueW(root,key,value,RRF_RT_REG_DWORD,NULL,&d,&size)==ERROR_SUCCESS)snprintf(out,cap,"%lu",(unsigned long)d);}
 }
 static void diag_system(HANDLE f,const char *user){
  static const wchar_t *nt=L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion";
- char build[64],ubr[32],shown[64],lab[160],branch[96],preview[16],ring[96],line[1200];
+ char build[64],ubr[32],shown[64],lab[160],branch[96],preview[16],ring[96],line[2048];
  diag_reg_text(HKEY_LOCAL_MACHINE,nt,L"CurrentBuild",build,sizeof build);diag_reg_text(HKEY_LOCAL_MACHINE,nt,L"UBR",ubr,sizeof ubr);
  diag_reg_text(HKEY_LOCAL_MACHINE,nt,L"DisplayVersion",shown,sizeof shown);diag_reg_text(HKEY_LOCAL_MACHINE,nt,L"BuildLabEx",lab,sizeof lab);
  diag_reg_text(HKEY_LOCAL_MACHINE,L"SOFTWARE\\Microsoft\\WindowsSelfHost\\Applicability",L"BranchName",branch,sizeof branch);
@@ -53,9 +59,9 @@ static void diag_system(HANDLE f,const char *user){
   {HKEY_LOCAL_MACHINE,L"SOFTWARE\\Khronos\\Vulkan\\ImplicitLayers","machine"},{HKEY_CURRENT_USER,L"SOFTWARE\\Khronos\\Vulkan\\ImplicitLayers","user"}};
  int count=0;
  for(int k=0;k<2;k++){HKEY h;if(RegOpenKeyExW(layers[k].root,layers[k].key,0,KEY_READ,&h)!=ERROR_SUCCESS)continue;
-  for(DWORD i=0;;i++){wchar_t name[600];DWORD len=600,type=0,data=0,size=sizeof data;
-   if(RegEnumValueW(h,i,name,&len,NULL,&type,(BYTE*)&data,&size)!=ERROR_SUCCESS)break;
-   char path[1000];WideCharToMultiByte(CP_UTF8,0,name,-1,path,sizeof path,NULL,NULL);
+  for(DWORD i=0;i<256;i++){wchar_t name[600];DWORD len=600,type=0,data=0,size=sizeof data;
+   LONG e=RegEnumValueW(h,i,name,&len,NULL,&type,(BYTE*)&data,&size);if(e==ERROR_MORE_DATA)continue;if(e!=ERROR_SUCCESS)break; /* unusual value: skip it, keep listing */
+   char path[1900]="";WideCharToMultiByte(CP_UTF8,0,name,-1,path,sizeof path,NULL,NULL);
    snprintf(line,sizeof line,"vulkan_implicit_layer %s enabled=%d file=%s",layers[k].where,type==REG_DWORD&&data==0,path);diag_write_masked(f,line,user);count++;}
   RegCloseKey(h);}
  diag_write(f,"vulkan_implicit_layers=%d\r\n",count);
@@ -68,7 +74,7 @@ static HANDLE diag_create(const wchar_t *dir,const wchar_t *name,wchar_t *path,i
 static void diag_export(HWND owner,const CsCountWindow *counts){
  SYSTEMTIME t;GetLocalTime(&t);wchar_t name[80],dir[32768],path[33000];
  swprintf(name,80,ui_tr(L"ConsoleSmooth-진단-%04d%02d%02d-%02d%02d%02d.txt",L"ConsoleSmooth-diagnostics-%04d%02d%02d-%02d%02d%02d.txt"),t.wYear,t.wMonth,t.wDay,t.wHour,t.wMinute,t.wSecond);
- /* 1.8.2 (11-09 user request): a save dialog lets the user pick the folder and name, starting on the Desktop.
+ /* 1.8.2 (11-09: ): a save dialog lets the user pick the folder and name, starting on the Desktop.
   * Cancel saves nothing. If the dialog cannot open, the old automatic path is used: Desktop, then the settings folder. */
  HANDLE f=INVALID_HANDLE_VALUE;DWORD n=GetEnvironmentVariableW(L"USERPROFILE",dir,32000);
  if(n&&n<32000&&wcslen(dir)+9<32000)wcscat(dir,L"\\Desktop");else dir[0]=0;
@@ -95,14 +101,16 @@ static void diag_export(HWND owner,const CsCountWindow *counts){
  diag_write(f,"monitor_hz=%d dpi=%d\r\n",ui_monitor_hz(),ui_dpi);
  diag_write(f,"settings rate_mode=%d multiplier=%d target_fps=%d stable=%d buffer_ms=%d low_buffer_ms=%d model=%d record_generated=%d show_fps=%d display_mode=%d cadence30=%d hud_keep=%d gpu_keep=%d fsr_fast=%d fps_corner=%ld\r\n",ui_mode,ui_mult,ui_target,ui_stable,ui_buffer,ui_low_buffer,ui_model,ui_record,ui_show_fps,ui_saved_display,ui_cadence,ui_hudkeep,ui_gpukeep,ui_fsrfast,ui_fps_corner);
  AutoRate a=auto_snapshot();diag_write(f,"input live=%d supported=%d provider=%d rate=%d/%d target=%d/%d size=%dx%d progressive=%d fallback=%d\r\n",a.live,a.supported,a.provider,a.sn,a.sd,a.tn,a.td,a.width,a.height,a.progressive,a.fallback);
- diag_write(f,"input_detail capped=%d signal=%d/%d capture=%d/%d content_fps=%.2f content_age_ms=%llu\r\n",a.capped,a.signal_sn,a.signal_sd,auto_capture_sn,auto_capture_sd,InterlockedCompareExchange(&auto_content_x100,0,0)/100.0,(unsigned long long)(GetTickCount64()-(ULONGLONG)InterlockedCompareExchange64(&auto_content_at,0,0)));
+ AutoCapture cap={0};AcquireSRWLockShared(&auto_lock);auto_capture_pick(GetTickCount64(),&cap,NULL);ReleaseSRWLockShared(&auto_lock);
+ diag_write(f,"capture_sources=%d active=%d full_screen_state=%ld gpu_path=%ld\r\n",a.sources,a.captures,direct_status(),InterlockedCompareExchange(&gpu_path_active,0,0));
+ diag_write(f,"input_detail capped=%d signal=%d/%d capture=%d/%d content_fps=%.2f content_age_ms=%llu\r\n",a.capped,a.signal_sn,a.signal_sd,cap.n,cap.d,InterlockedCompareExchange(&auto_content_x100,0,0)/100.0,(unsigned long long)(GetTickCount64()-(ULONGLONG)InterlockedCompareExchange64(&auto_content_at,0,0)));
  diag_write(f,"shown_fps=%.2f shown_age_ms=%llu\r\n",InterlockedCompareExchange(&auto_shown_x100,0,0)/100.0,(unsigned long long)(GetTickCount64()-(ULONGLONG)InterlockedCompareExchange64(&auto_shown_at,0,0))); /* 2.0.7 */
  CsStats s;int error,w,h;double buffer;AcquireSRWLockShared(&status_lock);s=ui_stats;error=ui_error;w=ui_width;h=ui_height;buffer=ui_live_buffer_ms;ReleaseSRWLockShared(&status_lock);
  double delivered=0;int measuring=fps_snapshot(&delivered);LONG bits=ui_requested();
  diag_write(f,"state generation_on=%d gpu_slow=%d error=%d processing_size=%dx%d buffer_ms=%.1f preview_fps=%.1f measuring=%d generated_fps=%.1f repeat_fps=%.1f\r\n",bits&1,(int)InterlockedCompareExchange(&auto_gpu_slow,0,0),error,w,h,buffer,delivered,measuring,counts->gen_fps,counts->repeat_fps);
  diag_write(f,"engine ready=%d ticks=%llu generated=%llu repeated=%llu static=%llu cuts=%llu overwritten=%llu failures=%llu last_ms=%.3f\r\n",s.ready,(unsigned long long)s.ticks,(unsigned long long)s.generated,(unsigned long long)s.repeated,(unsigned long long)s.static_pairs,(unsigned long long)s.cuts,(unsigned long long)s.overwritten,(unsigned long long)s.failures,s.last_inference_ms);
  {StageStats st;int valid;char g[512];AcquireSRWLockShared(&stage_lock);st=ui_stage;valid=ui_stage_valid;memcpy(g,ui_gpu_info,sizeof g);ReleaseSRWLockShared(&stage_lock);
-  if(g[0])diag_write(f,"gpu_detail %s\r\n",g);
+  if(g[0]){char gd[600];snprintf(gd,sizeof gd,"gpu_detail %s",g);diag_write_masked(f,gd,user);}
   if(valid)diag_write(f,"stages samples=%llu in_ms=%.2f gpu_ms=%.2f out_ms=%.2f total_ms=%.2f gpu_max_ms=%.2f total_max_ms=%.2f busy_pct=%.0f keep_ms=%.3f keep_dispatches=%llu\r\n",(unsigned long long)st.samples,st.in_ms,st.gpu_ms,st.out_ms,st.total_ms,st.gpu_max_ms,st.total_max_ms,st.busy_pct,st.keep_ms,(unsigned long long)st.keep_dispatches);}
  diag_write(f,"\r\nrecent log\r\n");
  AcquireSRWLockShared(&lock);unsigned total=log_ring_next,count=total<LOG_RING_LINES?total:LOG_RING_LINES;

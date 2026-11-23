@@ -17,15 +17,21 @@ static void device_invalidate_locked(void){++device_generation;auto_device_lost(
 static void device_watch_gone(void *data){
  DeviceWatch *watch=data;AcquireSRWLockExclusive(&device_sources_lock);
  for(int i=0;i<8;i++)if(device_sources[i]==watch)device_sources[i]=NULL;
+ device_overflow=0; /* a slot is free again */
  weak_clear(&watch->weak);device_invalidate_locked();ReleaseSRWLockExclusive(&device_sources_lock);
  HeapFree(GetProcessHeap(),0,watch);
 }
 /* A strong reference is held only for this poll, never in a pad's user data. */
 static void *device_selected(unsigned *generation){
- void *refs[8]={0};int count=0;AcquireSRWLockShared(&device_sources_lock);
- for(int i=0;i<8;i++)if(device_sources[i]){void *s=weak_get(&device_sources[i]->weak);if(s)refs[count++]=s;}
+ void *refs[8]={0};const void *ids[8]={0};int count=0;AcquireSRWLockShared(&device_sources_lock);
+ for(int i=0;i<8;i++)if(device_sources[i]){void *s=weak_get(&device_sources[i]->weak);if(s){ids[count]=device_sources[i];refs[count++]=s;}}
  *generation=device_generation;int overflow=device_overflow;ReleaseSRWLockShared(&device_sources_lock);
- if(count==1&&!overflow)return refs[0];for(int i=0;i<count;i++)object_unref(refs[i]);return NULL;
+ if(count==1&&!overflow)return refs[0];
+ /* 2.3.23: after switching the capture card in Streaming Center the old source can stay alive. Use the one with buffers. */
+ int pick=-1,live=0;for(int i=0;i<count;i++)if(auto_capture_active(ids[i])){pick=i;live++;}
+ void *chosen=live==1&&!overflow?refs[pick]:NULL;
+ for(int i=0;i<count;i++)if(refs[i]!=chosen)object_unref(refs[i]);
+ return chosen;
 }
 static int device_verified_model(const char *path){
  /* Only the GC573 PCIe backend has been exercised on this PC. */
@@ -56,7 +62,7 @@ static DWORD WINAPI device_poll(void *unused){
   }
   if(eligible&&!opened&&GetTickCount64()>=retry){
    int result=device_open_selected(&api,path,&controller);opened=result==0;retry=GetTickCount64()+2000;
-   if(result!=prior){logline("SDK_DEVICE_OPEN result=%d selected_path=%s",result,path);prior=result;}
+   if(result!=prior){{char shown[96];snprintf(shown,sizeof shown,"%s",path);char *cut=strstr(shown,"&rev_");if(cut)*cut=0;logline("SDK_DEVICE_OPEN result=%d device=%s",result,shown);} /* no instance path: it identifies the PC's card */prior=result;}
    if(!opened&&controller.impl){api.dtor(&controller);controller.impl=NULL;}
   }
   if(opened){
@@ -74,7 +80,7 @@ static DWORD WINAPI device_poll(void *unused){
   }
   mem_free(path);if(source)object_unref(source);Sleep(500);
  }
- auto_device_lost();if(controller.impl)api.dtor(&controller);FreeLibrary(held);CoUninitialize();logline("SDK_POLL_STOP");return 0;
+ auto_device_lost();if(controller.impl)api.dtor(&controller);FreeLibrary(held);CoUninitialize();logline("SDK_POLL_STOP");InterlockedExchange(&device_thread_started,0);return 0;
 }
 static DeviceWatch *device_watch_add(void *pad){
  void *source=object_parent(pad);if(!source)return NULL;
@@ -85,9 +91,10 @@ static DeviceWatch *device_watch_add(void *pad){
  ReleaseSRWLockExclusive(&device_sources_lock);for(int i=0;i<8;i++)if(refs[i])object_unref(refs[i]);object_unref(source);return watch;
 }
 static void device_start(void){
- if(InterlockedCompareExchange(&device_thread_started,1,0))return;
+ if(InterlockedCompareExchange(&auto_stopping,0,0)||InterlockedCompareExchange(&device_thread_started,1,0))return;
  /* The host uses a process-lifetime tracer; prevent a registry unload while its
   * worker is running. No work is started from DllMain. */
  HMODULE pinned=NULL;if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,(LPCWSTR)(uintptr_t)device_poll,&pinned))return;
+ if(device_thread){CloseHandle(device_thread);device_thread=NULL;}
  device_thread=CreateThread(NULL,0,device_poll,NULL,0,NULL);if(!device_thread)InterlockedExchange(&device_thread_started,0);
 }

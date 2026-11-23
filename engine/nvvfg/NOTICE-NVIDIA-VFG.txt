@@ -3,4 +3,4 @@ No NVIDIA files are shipped with ConsoleSmooth. Get-NvidiaVfg.ps1 downloads the 
 https://pypi.nvidia.com/nvidia-vfx/ after the user agrees, checks its SHA-256 and the NVIDIA signature of each DLL,
 and keeps only the runtime DLLs in %LOCALAPPDATA%\ConsoleSmooth\nvidia-vfg. NVIDIA license terms apply to that runtime:
 https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-software-license-agreement/
-Since 2.3.3 in public and internal builds; still no NVIDIA file is part of the ConsoleSmooth source or installer. NVIDIA RTX 40/50 only.
+Since 2.3.3 in public and internal builds; still no NVIDIA file is part of the ConsoleSmooth source or installer.

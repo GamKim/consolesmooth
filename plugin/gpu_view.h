@@ -55,7 +55,7 @@ static int gv_present(int tex,int kind){
    if(b)b=hdr_finish(); /* no 3D draws in the HDR window: a label draw next to the RTX Video HDR Blt removed the device (887a0005, 11-19) */
    LONG sync=InterlockedCompareExchange(&direct_sync,0,0);
    HRESULT hr=!b?E_FAIL:sync&&direct_tearing?IDXGISwapChain1_Present(direct_chain,0,DXGI_PRESENT_ALLOW_TEARING):IDXGISwapChain1_Present(direct_chain,1,DXGI_PRESENT_DO_NOT_WAIT);
-   if(hr==DXGI_ERROR_WAS_STILL_DRAWING){++direct_skips;hr=S_OK;}else if(hr>=0)++direct_presents;
+   if(hr==DXGI_ERROR_WAS_STILL_DRAWING){++direct_skips;hr=S_OK;}else if(hr>=0){++direct_presents;direct_presented();}
    ok=hr>=0;{static int nfail,inrow;if(!ok&&nfail++<10)logline("GPU_VIEW hdr present failed hr=%08lx blt=%d",(unsigned long)hr,b);
     /* safety: HDR keeps failing -> off for this session; the window closes and reopens in SDR */
     inrow=ok?0:inrow+1;if(inrow>=30){inrow=0;InterlockedExchange(&gen_hdr,0);logline("HDR_FAILED_OFF");InterlockedExchange(&direct_state,-3);if(direct_hwnd)PostMessageW(direct_hwnd,DIRECT_CLOSE_MESSAGE,0,0);}}}
@@ -68,7 +68,7 @@ static int gv_present(int tex,int kind){
    ID3D11ShaderResourceView *none=NULL;ID3D11DeviceContext_PSSetShaderResources(direct_ctx,0,1,&none);
    LONG sync=InterlockedCompareExchange(&direct_sync,0,0);
    HRESULT hr=sync&&direct_tearing?IDXGISwapChain1_Present(direct_chain,0,DXGI_PRESENT_ALLOW_TEARING):IDXGISwapChain1_Present(direct_chain,1,DXGI_PRESENT_DO_NOT_WAIT);
-   if(hr==DXGI_ERROR_WAS_STILL_DRAWING){++direct_skips;hr=S_OK;}else ++direct_presents;
+   if(hr==DXGI_ERROR_WAS_STILL_DRAWING){++direct_skips;hr=S_OK;}else if(hr>=0){++direct_presents;direct_presented();}
    ok=hr>=0;if(!ok)logline("GPU_VIEW present failed hr=%08lx",(unsigned long)hr);}
  }
  ReleaseSRWLockShared(&direct_lock);return ok;
@@ -123,7 +123,7 @@ static const char gv_lab_src_hdr[]="Texture2D t:register(t0);SamplerState s:regi
 static ID3D11PixelShader *gv_lab_ps_hdr;
 static void gv_lab_release(void){if(gv_lab_srv){ID3D11ShaderResourceView_Release(gv_lab_srv);gv_lab_srv=NULL;}if(gv_lab_tex){ID3D11Texture2D_Release(gv_lab_tex);gv_lab_tex=NULL;}
  if(gv_lab_ps){ID3D11PixelShader_Release(gv_lab_ps);gv_lab_ps=NULL;}if(gv_lab_ps_hdr){ID3D11PixelShader_Release(gv_lab_ps_hdr);gv_lab_ps_hdr=NULL;}if(gv_lab_blend){ID3D11BlendState_Release(gv_lab_blend);gv_lab_blend=NULL;}gv_lab_ptr=NULL;gv_lab_tried=0;}
-/* 2.3.13 (11-19 user: transparent readout): the label region of the SDR source is read back (small copy), the text is
+/* 2.3.13 (11-19: transparent readout): the label region of the SDR source is read back (small copy), the text is
  * mixed in on the CPU and written into a copy of the source, which then goes through RTX Video HDR. Only copies, no draws
  * (draws and a second video processor next to the TrueHDR Blt removed or hung the device). Recording keeps its originals. */
 static ID3D11Texture2D *gv_hs_copy,*gv_hs_stage,*gv_hs_patch;static int gv_hs_w,gv_hs_h;static uint32_t *gv_hs_px;

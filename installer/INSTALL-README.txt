@@ -6,7 +6,7 @@ AVerMedia와 관계없는 비공식·무료 플러그인입니다.
 
 필요한 것
 - AVerMedia 캡처보드와 AVerMedia Streaming Center(확인한 버전 1.8.22.2, 최신 1.9.19.1 x64). 확인한 캡처보드: Live Gamer 4K(GC573), GC313 Pro, GC553 Pro.
-- 그래픽카드: RIFE·FSR 3는 Vulkan 지원 GPU, AMD FSR 프레임 생성은 DirectX 12 GPU, NVIDIA Video Frame Generation·DLSS 프레임 생성은 NVIDIA RTX 40/50.
+- 그래픽카드: RIFE·FSR 3는 Vulkan 지원 GPU, AMD FSR 프레임 생성은 DirectX 12 GPU, NVIDIA Video Frame Generation은 NVIDIA RTX(RTX 3070에서 2·3배 확인), DLSS 프레임 생성은 NVIDIA 드라이버가 지원하는 NVIDIA RTX.
   최소 사양: AMD Radeon RX 6600(FHD 60fps → 120fps). 실제 카드로 확인한 가장 낮은 GPU입니다.
   지포스는 RTX 5080 클럭을 낮춘 근사 측정(11-14)으로 FSR 3는 RTX 2060급까지 100%, RIFE는 RTX 3070·4060급까지 생성했습니다(2070·3060급 68%).
   RX 6600에서는 RIFE 4.6이 움직임을 1/4 크기로 계산하고(화질 조금 낮음), FSR 3은 "GPU 클럭 유지"를 켜야 합니다(AMD는 기본 켬).
@@ -28,8 +28,8 @@ AVerMedia와 관계없는 비공식·무료 플러그인입니다.
 - 입력 프레임은 캡처보드에서 자동으로 감지합니다. PS5처럼 "60Hz"가 실제로 59.94Hz인 입력도 지원합니다(목표 fps도 같은 비율로 맞춤: 160 → 159.84).
 - 모델(6개):
   RIFE 4.6(기본, 화질과 속도의 균형) / RIFE 4.15 lite(조금 더 좋고 조금 무거움) / FSR 3(2배·4배, 가벼움. 4배는 가운데 장면을 두 번 나눠 만듭니다) /
-  AMD FSR 프레임 생성(AMD 공식 DLL, 2배, 가장 가벼움) / NVIDIA Video Frame Generation(RTX 40/50, 화질 가장 좋음. 처음 고를 때 NVIDIA에서 런타임을 받습니다) /
-  NVIDIA DLSS 프레임 생성(RTX 40/50, 2배, RTX 50은 3·4배도. NVIDIA 런타임이 설치 파일에 들어 있습니다).
+  AMD FSR 프레임 생성(AMD 공식 DLL, 2배, 가장 가벼움) / NVIDIA Video Frame Generation(화질 가장 좋음. 처음 고를 때 NVIDIA에서 런타임을 받습니다) /
+  NVIDIA DLSS 프레임 생성(2배, RTX 50은 3·4배도. NVIDIA 런타임이 설치 파일에 들어 있습니다).
 - 출력: 2~4배 또는 목표 프레임. 처리 해상도는 Streaming Center 녹화 설정 해상도를 따릅니다. FHD(1920×1080)를 권장합니다.
 - 배수는 입력 신호 기준입니다. 30fps 게임도 콘솔은 60Hz로 보내므로, 2배면 출력은 120Hz입니다. 그 안에 새 화면이 몇 장 들어가는지는
   30fps 보정이 정합니다(아래 "30fps 게임" 참고).

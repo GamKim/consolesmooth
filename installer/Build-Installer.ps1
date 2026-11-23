@@ -5,7 +5,7 @@ $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 $build=Join-Path $root 'build\installer'
 $dist=Join-Path $root 'dist'
-$version='1.1.5'
+$version='1.1.6'
 # 11-19: the settings window title shows CS_PLUGIN_VERSION (1.1.1 shipped still saying 1.1.0); keep it equal to $version.
 $pv=(Select-String -LiteralPath (Join-Path $root 'plugin\diagnostics.h') -Pattern '#define CS_PLUGIN_VERSION "([^"]+)"').Matches[0].Groups[1].Value
 if($pv -ne $version){throw "plugin\diagnostics.h CS_PLUGIN_VERSION is $pv, installer is $version"}
@@ -16,6 +16,10 @@ $payload=Join-Path $build 'payload.zip'
 $entries=[ordered]@{}
 $entries['gstconsolesmoothprobe.dll']=Join-Path $root 'build/stage/gstconsolesmoothprobe.dll'
 $engine=Join-Path $root 'build/stage/engine'
+foreach($need in 'consolesmooth_engine.dll','model/flownet.bin','manifest.json'){if(-not (Test-Path -LiteralPath (Join-Path $engine $need))){throw "build/stage/engine/$need is missing: run engine\Build-Engine.ps1 first"}}
+# every SHA-256 pinned in model_catalog.h must be a staged file, or that model cannot start
+$staged=@(Get-ChildItem -LiteralPath $engine -Recurse -File | ForEach-Object {(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash})
+foreach($m in [regex]::Matches([IO.File]::ReadAllText((Join-Path $root 'engine\model_catalog.h')),'"([0-9A-F]{64})"')){if($staged -notcontains $m.Groups[1].Value){throw "pinned file $($m.Groups[1].Value) is not in build/stage/engine"}}
 foreach($f in Get-ChildItem -LiteralPath $engine -Recurse -File){
  if($f.Name -eq 'settings.ini'){continue}
  $relative=$f.FullName.Substring($engine.Length+1).Replace('\','/')

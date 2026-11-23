@@ -26,7 +26,7 @@ See licenses/ for complete dependency notices and source-manifest.json for commi
 
 Models use FP16 storage and FP32 arithmetic; native image dimensions retained.
 1.4.3: IFRNet, IFRNet Large and CAIN code and models were removed; RIFE 4.6 only.
-No manufacturer binary or proprietary LSFG model is redistributed.
+No AVerMedia binary is redistributed. The installer (not this source) contains AMD and NVIDIA runtimes, see the end.
 
 1.4.1 modifications: initialize ncnn GPU image-load workaround flag before vendor
 overrides. Model weights and precision unchanged.
@@ -59,3 +59,16 @@ python, documentation) are left out of this repository.
 Copyright (c) 2015-2026 The Khronos Group Inc., LunarG, Inc., Valve Corporation; Apache-2.0 / MIT.
 Texts: vulkan/VulkanRT-License.txt and licenses/Vulkan-Headers-LICENSES (Apache-2.0). Used only when Windows has no
 vulkan-1.dll of the graphics driver.
+
+Manufacturer runtimes in the installer, unmodified, under their own licenses (not MIT):
+AMD FidelityFX SDK 2.4.0 frame generation DLLs (engines/amdfg, LICENSE.md there); NVIDIA nvngx_dlssg.dll 310.9.16
+(engines/dlssg, LICENSE-NVIDIA-RTX-SDK.txt there). The bridges cs_amdfg.dll and cs_dlssg.dll are ConsoleSmooth code
+(amdfg/fsr31_dx12.cpp, dlssg/dlssg_ngx.cpp).
+
+NVIDIA Video Effects API declarations in vfg_engine.cpp follow the MIT-licensed NVIDIA headers and sample;
+texts in licenses/nvidia_vfx_headers.txt and licenses/nvidia_vfx_samples.txt.
+
+Further source changes to third-party code: ncnn gpu.cpp (Windows external memory extensions) and command.cpp;
+rife-ncnn-vulkan rife.h/rife_tagged_cache.h (GPU input path, tagged source cache); FidelityFX ffx_vk.cpp (time stamps,
+cs_ffx_mark) and ffx_frameinterpolation.cpp (no game motion vectors, csNoGame). The diffs in third_party/PATCHES do not
+contain these yet.

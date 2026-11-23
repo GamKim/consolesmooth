@@ -35,8 +35,8 @@ This is a personal project, not affiliated with AVerMedia, and it contains no AV
 | RIFE 4.15 lite | A little better than RIFE 4.6, a little heavier | Vulkan GPU |
 | FSR 3 | Light, 2x and 4x | Vulkan 1.3 GPU |
 | AMD FSR Frame Generation | AMD's own frame generation DLL, lightest (2x) | DirectX 12 GPU |
-| NVIDIA Video Frame Generation | Best quality. The runtime is downloaded from NVIDIA the first time you choose it | NVIDIA RTX 40/50 |
-| NVIDIA DLSS Frame Generation | Light (2x, 3x, 4x; 3x/4x on RTX 50) | NVIDIA RTX 40/50 |
+| NVIDIA Video Frame Generation | Best quality. The runtime is downloaded from NVIDIA the first time you choose it | NVIDIA RTX (2x and 3x checked on an RTX 3070) |
+| NVIDIA DLSS Frame Generation | Light (2x, 3x, 4x; 3x/4x on RTX 50) | NVIDIA RTX supported by the NVIDIA driver |
 
 Score of the 60 fps made from the same 30 fps input against a real 60 fps recording (higher is better, Switch 2 Zelda night forest, 701 frames): NVIDIA Video Frame Generation 33.22 dB, RIFE 4.15 lite 33.05, RIFE 4.6 32.94, DLSS Frame Generation 32.64, FSR 3 32.55, AMD FSR Frame Generation 31.04.
 

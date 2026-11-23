@@ -48,7 +48,7 @@ static int on_pace_impl(void *pad,void *info,void *data){
  /* Each sink needs its first buffers to preroll: dropping them stopped the pipeline in 5 of 7 runs. */
  if(s->direct&&s->direct_passed<300)++s->direct_passed;
  else if(s->direct==2&&(no_thumb||InterlockedCompareExchange(&direct_state,0,0)==2))return 0;
- /* 2.2.4 (11-14 user): variable refresh or sync off, in the window and in full screen: no refresh hold on the large preview,
+ /* 2.2.4 (11-14): variable refresh or sync off, in the window and in full screen: no refresh hold on the large preview,
   * each frame goes on as it arrives (full screen: our window presents with tearing allowed). */
  if(s->direct==1&&InterlockedCompareExchange(&direct_sync,0,0)){s->valid=0;s->push=0;return pace_pass(s);}
  if(!dwm_timing||dwm_timing(NULL,&t)<0||!t.qpcRefreshPeriod)return pace_pass(s);
@@ -80,7 +80,7 @@ static int on_pace_impl(void *pad,void *info,void *data){
    * after the vblank wanders, and 0.15 lost frames to it) of its own refresh, one slot
    * (step refreshes) after the previous one, so frames never share or skip a refresh. Late frames
    * take the next free slot; a lead above pace_lead (1.3) refreshes for 30 frames gives one slot back. */
-  /* 1.8.6: full screen also when the target does not divide the refresh (user decision 11-09). The full screen window is
+  /* 1.8.6: full screen also when the target does not divide the refresh (11-09). The full screen window is
    * paced with the fractional step (120 fps on 160 Hz: one slot every 1.33 refreshes); presenting on arrival instead skipped
    * about 15% (two frames inside one refresh). The host's own sink keeps the old behaviour (no pacing) when not integer. */
   double st=floor(step+0.5);

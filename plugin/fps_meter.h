@@ -70,7 +70,7 @@ static int fps_sample(CsFpsWindow *s,uint64_t now,uint64_t frequency){
  * four were new, new, almost the same (0.05-0.2 levels), identical). Each output frame is compared with the previous one
  * on a 64x36 grid (green channel). A frame counts as new when its change is over a fifth of the largest change of the
  * last 8 frames.
- * 2.0.9 (11-11 user: the readout flipped between "원본 30 / 지금 60" and "59.9 / 119.9" on still moments): every frame
+ * 2.0.9 (11-11: the readout flipped between "원본 30 / 지금 60" and "59.9 / 119.9" on still moments): every frame
  * counts, so a still picture reads 0 and a rate is ready every 2 s; only identical frames (no change) are never new.
  * 2.1.0: a sixteenth instead of a fifth. Test copy trace (PS5, RIFE 2x): in-between frames changed 300-640 while the step
  * into the next original changed 2268-2741 (motion plus the sharpness step), so a fifth missed them (read 30-47 instead of

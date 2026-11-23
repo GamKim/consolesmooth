@@ -3,7 +3,7 @@
 // No NVIDIA binary is shipped: the runtime is the one the user installed (nvidia-vfx from
 // pypi.nvidia.com, folder ...\site-packages\nvvfx\libs) or a folder named by CS_VFG_DIR.
 // API declarations follow the MIT-licensed NVIDIA Broadcast VFX SDK headers and the MIT
-// NVIDIA-Maxine/VFX-SDK-Samples VideoFrameGenerationEffectApp (see third_party/nvvfx-headers-mit).
+// NVIDIA-Maxine/VFX-SDK-Samples VideoFrameGenerationEffectApp (see engine/licenses/nvidia_vfx_*.txt).
 // Host BGRA/BGR in and out; each source is uploaded once into a two-slot GPU cache (tagged ids).
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -66,7 +66,7 @@ bool exists(const std::wstring& p) { DWORD a = GetFileAttributesW(p.c_str()); re
 std::wstring findRuntime() {
  wchar_t v[MAX_PATH]; DWORD n = GetEnvironmentVariableW(L"CS_VFG_DIR", v, MAX_PATH);
  if (n && n < MAX_PATH && exists(std::wstring(v) + L"\\NVVideoEffects.dll")) return v;
- // 2.2.8 internal: one-click download target (engines\nvvfg\Get-NvidiaVfg.ps1).
+ // One-click download target (engines\nvvfg\Get-NvidiaVfg.ps1).
  n = GetEnvironmentVariableW(L"LOCALAPPDATA", v, MAX_PATH);
  if (n && n < MAX_PATH) { std::wstring c = std::wstring(v) + L"\\ConsoleSmooth\\nvidia-vfg"; if (exists(c + L"\\NVVideoEffects.dll")) return c; }
  n = GetEnvironmentVariableW(L"APPDATA", v, MAX_PATH); if (!n || n >= MAX_PATH) return L"";
@@ -80,7 +80,7 @@ std::wstring findRuntime() {
 }
 
 struct Vfg final : SeqEngine {
- Api api; NvVFX_Handle fx = nullptr; CUstream stream = nullptr; int w = 0, h = 0; unsigned mode = 1;  // 2.2.9: MEDIUM (was HIGH = 2, ~4x the GPU time; 4070-class 3.6% live). Bench/Veyra use MEDIUM.
+ Api api; NvVFX_Handle fx = nullptr; CUstream stream = nullptr; int w = 0, h = 0; unsigned mode = 1;  // 2.2.9: MEDIUM (was HIGH = 2, ~4x the GPU time; 4070-class 3.6% live). The benchmark used MEDIUM.
  NvCVImage src[2]{}, dst{}, tmp{}; uint64_t srcId[2]{}; int next = 0;
  std::vector<uint8_t> host;
  ~Vfg() { release(); if (stream && api.streamDestroy) api.streamDestroy(stream); }
@@ -146,15 +146,15 @@ struct Vfg final : SeqEngine {
 };
 } // namespace
 
-static void vfgLog(const std::string& m) {
+static void vfgLog(const std::string& m) { // only with CS_VFG_LOG set
+ if (!GetEnvironmentVariableW(L"CS_VFG_LOG", nullptr, 0)) return;
  wchar_t t[MAX_PATH]; DWORD n = GetTempPathW(MAX_PATH, t); if (!n || n >= MAX_PATH) return;
  FILE* f = _wfopen((std::wstring(t) + L"cs_vfg_test.log").c_str(), L"a"); if (!f) return; fputs(m.c_str(), f); fputc(10, f); fclose(f);
 }
 static SeqEngine* cs_create_vfg_impl(std::string& error);
 SeqEngine* cs_create_vfg(std::string& error) {
  SeqEngine* e = cs_create_vfg_impl(error);
- wchar_t ad[MAX_PATH]; DWORD n = GetEnvironmentVariableW(L"APPDATA", ad, MAX_PATH); std::string a; for (DWORD i = 0; i < n && i < MAX_PATH; i++) a += (char)(ad[i] < 128 ? ad[i] : '?');
- vfgLog(std::string("cs_create_vfg pid=") + std::to_string(GetCurrentProcessId()) + " ok=" + (e ? "1" : "0") + " error=" + error + " appdata=" + a);
+ vfgLog(std::string("cs_create_vfg pid=") + std::to_string(GetCurrentProcessId()) + " ok=" + (e ? "1" : "0") + " error=" + error);
  return e;
 }
 static SeqEngine* cs_create_vfg_impl(std::string& error) {
@@ -178,9 +178,9 @@ static SeqEngine* cs_create_vfg_impl(std::string& error) {
  a.streamSync = reinterpret_cast<decltype(a.streamSync)>(GetProcAddress(core, "NvVFX_CudaStreamSynchronize"));
  if (!missing.empty()) { error = "NVIDIA VFX runtime exports missing:" + missing; return nullptr; }
  wchar_t m[8]; DWORD n = GetEnvironmentVariableW(L"CS_VFG_MODE", m, 8); if (n == 1 && m[0] >= L'0' && m[0] <= L'2') v->mode = m[0] - L'0';
- if (a.streamCreate(&v->stream)) { error = "CUDA stream unavailable (NVIDIA RTX 40/50 required for Video Frame Generation)"; return nullptr; }
+ if (a.streamCreate(&v->stream)) { error = "CUDA stream unavailable (Video Frame Generation needs an NVIDIA RTX graphics card)"; return nullptr; }
  return v.release();
 }
 
-// 2.2.8 internal: zero-copy GPU path (D3D11 shared textures -> CUDA), used by the plugin when NVIDIA VFG is chosen.
+// Zero-copy GPU path (D3D11 shared textures -> CUDA), used by the plugin when NVIDIA VFG is chosen.
 #include "vfg_gpu.inc"

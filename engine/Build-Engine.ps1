@@ -26,45 +26,47 @@ foreach($file in @('flownet.param','flownet.bin')){
  Copy-Item -LiteralPath (Join-Path $root "third_party\rife-ncnn-vulkan\models\rife-v4.15-lite\$file") -Destination (Join-Path $dest 'rife415lite')
 }
 Copy-Item -LiteralPath (Join-Path $root 'third_party\fidelityfx-sdk-1.1.4\LICENSE.txt') -Destination (Join-Path $dest 'engines\fsr3\LICENSE-FidelityFX.txt')
-# 1.1.0: the two bridge DLLs need their SDK sources outside this repository (CS_DLSSG_SRC / CS_AMDFG_SRC); without them
+# The two bridge DLLs need the NVIDIA / AMD SDK files, which are not in this repository (CS_DLSSG_SRC / CS_AMDFG_SRC); without them
 # those two models are skipped and the rest builds normally.
-$dsrc0=if($env:CS_DLSSG_SRC){$env:CS_DLSSG_SRC}else{'E:\fpstest\dlssg-ngx'}
-if(-not (Test-Path (Join-Path $dsrc0 'dlssg_ngx.cpp'))){Write-Warning "DLSS FG bridge source not found ($dsrc0): DLSS FG is left out"}else{ & { # DLSS FG slot. cs_dlssg.dll = our NGX DLSSG wrapper (public DLSS SDK headers stay outside this tree).
- $dsrc=if($env:CS_DLSSG_SRC){$env:CS_DLSSG_SRC}else{'E:\fpstest\dlssg-ngx'};$zig=Join-Path $root 'toolchain\zig-x86_64-windows-0.14.1\zig.exe'
+$dsrc0=if($env:CS_DLSSG_SRC){$env:CS_DLSSG_SRC}else{(Join-Path $root 'sdk\dlssg')}
+if(-not (Test-Path (Join-Path $dsrc0 'sdk\include'))){Write-Warning "DLSS SDK not found ($dsrc0): DLSS FG is left out"}else{ & { # DLSS FG slot. cs_dlssg.dll = our NGX DLSSG wrapper (public DLSS SDK headers stay outside this tree).
+ $dsrc=if($env:CS_DLSSG_SRC){$env:CS_DLSSG_SRC}else{(Join-Path $root 'sdk\dlssg')};$zig=Join-Path $root 'toolchain\zig-x86_64-windows-0.14.1\zig.exe'
  New-Item -ItemType Directory -Path (Join-Path $dest 'engines\dlssg') -Force|Out-Null
  $env:ZIG_GLOBAL_CACHE_DIR=Join-Path $root 'toolchain\cache'
- & $zig c++ -target x86_64-windows-gnu -O2 -std=c++17 -shared -Wno-nonportable-include-path -I (Join-Path $dsrc 'sdk\include') (Join-Path $dsrc 'dlssg_ngx.cpp') -o (Join-Path $dest 'engines\dlssg\cs_dlssg.dll') -ld3d12 -ldxgi -ladvapi32 -lpsapi
+ & $zig c++ -target x86_64-windows-gnu -O2 -std=c++17 -shared -Wno-nonportable-include-path -I (Join-Path $dsrc 'sdk\include') (Join-Path $PSScriptRoot 'dlssg\dlssg_ngx.cpp') -o (Join-Path $dest 'engines\dlssg\cs_dlssg.dll') -ld3d12 -ldxgi -ladvapi32 -lpsapi
  $env:ZIG_GLOBAL_CACHE_DIR=$saved
  if($LASTEXITCODE){throw 'cs_dlssg build failed'}
  Get-ChildItem (Join-Path $dest 'engines\dlssg') -Filter '*.pdb'|Remove-Item;Get-ChildItem (Join-Path $dest 'engines\dlssg') -Filter '*.lib'|Remove-Item
  # 2.3.4: nvngx_dlssg.dll (NVIDIA-signed, public Streamline/DLSS SDK 310.9.16) is bundled in the installer under the NVIDIA RTX SDK
  # license (copied beside it). It is never part of the source repository (build/ and dist/ are ignored).
- $nsrc=if($env:CS_DLSSG_RUNTIME_SRC){$env:CS_DLSSG_RUNTIME_SRC}else{'E:\fpstest\ext\sl-sdk\bin\x64'}
+ $nsrc=if($env:CS_DLSSG_RUNTIME_SRC){$env:CS_DLSSG_RUNTIME_SRC}else{(Join-Path $root 'sdk\streamline-bin')}
  Copy-Item -LiteralPath (Join-Path $nsrc 'nvngx_dlssg.dll') -Destination (Join-Path $dest 'engines\dlssg')
  Copy-Item -LiteralPath (Join-Path $nsrc 'nvngx_dlss.license.txt') -Destination (Join-Path $dest 'engines\dlssg\LICENSE-NVIDIA-RTX-SDK.txt')
  foreach($f in @('NOTICE-NVIDIA-DLSSG.txt','Get-NvidiaDlssg.ps1')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot "dlssg\$f") -Destination (Join-Path $dest 'engines\dlssg')}
 } }
-# 2.3.2: the extra RIFE models (4.17-4.26) are no longer shipped (11-18 user: keep only the filmed models).
+# 2.3.2: the extra RIFE models (4.17-4.26) are no longer shipped (11-18: only the measured models are kept).
 # 2.3.3: AMD FSR FG and the NVIDIA VFG notice are staged in public builds too (DLSS FG is staged above, 1.1.0: every build).
 $zig=Join-Path $root 'toolchain\zig-x86_64-windows-0.14.1\zig.exe';$saved=$env:ZIG_GLOBAL_CACHE_DIR
-$asrc0=if($env:CS_AMDFG_SRC){$env:CS_AMDFG_SRC}else{'E:\fpstest\fsr31-dx12'}
-if(-not (Test-Path (Join-Path $asrc0 'fsr31_dx12.cpp'))){Write-Warning "AMD FSR FG bridge source not found ($asrc0): AMD FSR FG is left out"}
+$asrc0=if($env:CS_AMDFG_SRC){$env:CS_AMDFG_SRC}else{(Join-Path $root 'sdk\fidelityfx')}
+if(-not (Test-Path (Join-Path $asrc0 'sdk\Kits'))){Write-Warning "FidelityFX SDK 2.4 not found ($asrc0): AMD FSR FG is left out"}
 & {
- if(-not (Test-Path (Join-Path $asrc0 'fsr31_dx12.cpp'))){return}
- # 2.2.8 internal: AMD FSR FG slot (our cs_amdfg.dll + AMD's signed DLLs and license, unmodified)
- $asrc=if($env:CS_AMDFG_SRC){$env:CS_AMDFG_SRC}else{'E:\fpstest\fsr31-dx12'}
+ if(-not (Test-Path (Join-Path $asrc0 'sdk\Kits'))){return}
+ # AMD FSR FG slot (our cs_amdfg.dll + AMD's signed DLLs and license, unmodified)
+ $asrc=if($env:CS_AMDFG_SRC){$env:CS_AMDFG_SRC}else{(Join-Path $root 'sdk\fidelityfx')}
  New-Item -ItemType Directory -Path (Join-Path $dest 'engines\amdfg') -Force|Out-Null
  $env:ZIG_GLOBAL_CACHE_DIR=Join-Path $root 'toolchain\cache'
- & $zig c++ -target x86_64-windows-gnu -O2 -std=c++17 -shared -Wno-nonportable-include-path -Wno-deprecated-declarations -I (Join-Path $asrc 'sdk\Kits\FidelityFX\api\include') -I (Join-Path $asrc 'sdk\Kits\FidelityFX\framegeneration\include') (Join-Path $asrc 'fsr31_dx12.cpp') -o (Join-Path $dest 'engines\amdfg\cs_amdfg.dll') -ld3d12 -ldxgi -lpsapi
+ & $zig c++ -target x86_64-windows-gnu -O2 -std=c++17 -shared -Wno-nonportable-include-path -Wno-deprecated-declarations -I (Join-Path $asrc 'sdk\Kits\FidelityFX\api\include') -I (Join-Path $asrc 'sdk\Kits\FidelityFX\framegeneration\include') (Join-Path $PSScriptRoot 'amdfg\fsr31_dx12.cpp') -o (Join-Path $dest 'engines\amdfg\cs_amdfg.dll') -ld3d12 -ldxgi -lpsapi
  $env:ZIG_GLOBAL_CACHE_DIR=$saved
  if($LASTEXITCODE){throw 'cs_amdfg build failed'}
  Get-ChildItem (Join-Path $dest 'engines\amdfg') -Include '*.pdb','*.lib' -Recurse|Remove-Item
  foreach($f in @('amd_fidelityfx_framegeneration_dx12.dll','amd_fidelityfx_loader_dx12.dll','LICENSE.md','3rdpartynotice.md')){Copy-Item -LiteralPath (Join-Path $asrc "rt\$f") -Destination (Join-Path $dest 'engines\amdfg')}
  Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'amdfg\NOTICE-AMD-FG.txt') -Destination (Join-Path $dest 'engines\amdfg')
- New-Item -ItemType Directory -Path (Join-Path $dest 'engines\nvvfg') -Force|Out-Null;foreach($f in @('NOTICE-NVIDIA-VFG.txt','Get-NvidiaVfg.ps1')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot "nvvfg\$f") -Destination (Join-Path $dest 'engines\nvvfg')}}
+}
+# NVIDIA VFG notice and download script: in every build, also without the AMD SDK.
+New-Item -ItemType Directory -Path (Join-Path $dest 'engines\nvvfg') -Force|Out-Null;foreach($f in @('NOTICE-NVIDIA-VFG.txt','Get-NvidiaVfg.ps1')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot "nvvfg\$f") -Destination (Join-Path $dest 'engines\nvvfg')}
 # 1.1.5: official Vulkan loader (LunarG runtime components zip) for PCs whose graphics driver left no vulkan-1.dll. Not part of
 # the source repository; the hash is the one the plugin checks (plugin/vulkan_pin.h).
-$vsrc=if($env:CS_VULKANRT_SRC){$env:CS_VULKANRT_SRC}else{'E:\fpstest\vulkanrt-1.4.363.0\x\VulkanRT-X64-1.4.363.0-Components'}
+$vsrc=if($env:CS_VULKANRT_SRC){$env:CS_VULKANRT_SRC}else{(Join-Path $root 'sdk\vulkan-runtime')}
 if(-not (Test-Path (Join-Path $vsrc 'x64\vulkan-1.dll'))){Write-Warning "Vulkan runtime components not found ($vsrc): engine\vulkan is left out"}else{
  $pin=[regex]::Match([IO.File]::ReadAllText((Join-Path $root 'plugin\vulkan_pin.h')),'CS_VULKAN_SHA256 "([0-9A-F]{64})"').Groups[1].Value
  if((Get-FileHash -LiteralPath (Join-Path $vsrc 'x64\vulkan-1.dll') -Algorithm SHA256).Hash -ne $pin){throw 'vulkan-1.dll does not match plugin\vulkan_pin.h'}

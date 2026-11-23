@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1.6 — capture card switching, lower latency in 30 fps games, stability (2026-11-23)
+
+- **Switching capture cards no longer needs a restart.** After changing the capture card in Streaming Center, the input of the new card is recognized right away. Before, the old card's state was kept and nothing was generated until Streaming Center was restarted. Checked on a PC with a GC573 and a GC551G2.
+- **Cards that report a rate like 29.97 in a rounded form now generate** (GC551G2). **Full screen opens with other capture cards** on the fast path even before the input rate is known.
+- **Lower latency in 30 fps games** (full screen, sync set to VRR or off, monitor of 144 Hz or more, "Show generated frames briefly" on): the generated frame is shown for one refresh of the monitor, at least 20% of a source interval, instead of 25%. Measured at 3840x2160 processing (RTX 5080, 160 Hz, 2x, test source of about 29 fps made inside the plugin): original frame from arrival to being handed to the screen NVIDIA Video Frame Generation 13.6 → 12.0 ms, DLSS Frame Generation 12.7 → 11.1 ms, RIFE 4.6 21.5 → 20.2 ms. No frames dropped. 120 Hz monitors, V-Sync and 60 fps games are unchanged.
+- **Fixed a crash while a setting that restarts the engine was changed** (model, size, rate). It happened in 3 of 4 stress runs of 1.1.5 and in none of 8 runs of the fixed version.
+- **The reason for a failed start is now really shown.** 1.1.4 announced it, but in the plugin it was never read, so the diagnostics and the Recommended settings page stayed without a reason. Corrected here.
+- The retry without Vulkan overlay layers (1.1.4) is now used only for RIFE and FSR 3 and puts everything back afterwards. Recommended settings measures the fast path when it is in use. The plugin no longer waits without end when the graphics driver resets.
+- Closing Streaming Center while full screen or RTX Video HDR is on stops them first. Exported diagnostics leave out the card's serial path.
+- Installer: puts the previous version back when an update fails half way. The license texts of the NVIDIA sample code, and the source of the DLSS and AMD FSR bridge files, are included in the source.
+- The names in the model list are now "NVIDIA VFG" and "NVIDIA DLSS FG". NVIDIA Video Frame Generation was used on an RTX 3070: 2x and 3x work, 4x is too heavy there. DLSS Frame Generation works only when the NVIDIA driver supports the graphics card for it; it has not been tested on RTX 20/30.
+- FSR 3 could not start in a build made from this repository (the pinned SHA-256 of its license file was for another line ending). The released installers were not affected. The installer build now stops when a pinned file is not the staged one.
+- The Chinese and Japanese quick starts were removed. For GTA VI the guides now recommend setting the source input to 30 FPS.
+- The 1.1.5 fix was confirmed on the RTX 3070 PC that had the problem.
+- Not tested with a live console signal on this build: lower latency (test source only), failure reason, closing while RTX Video HDR is on, a graphics driver reset.
+
 ## 1.1.5 — works when the graphics driver left no vulkan-1.dll (2026-11-23)
 
 - The frame generation engine needs `vulkan-1.dll`, the Vulkan loader that normally comes with the graphics driver. On a PC without it the engine could not be opened (`FG_ENGINE_LOAD_FAILED win32=126`) and nothing was generated. The installer now includes the official loader (LunarG Vulkan Runtime 1.4.363.0, signed, unmodified) in the plugin folder. The driver's own file is always used first; the included one only when Windows has none. Nothing is written to the Windows folder, and uninstalling removes it.

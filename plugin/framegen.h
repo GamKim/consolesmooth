@@ -29,14 +29,21 @@ static int (*stream_live_metrics)(void*,LiveMetrics*);
 /* 1.7.8 diagnostics (optional exports): stage averages over the last 240 inferences and the driver/queue line. */
 typedef struct {double in_ms,gpu_ms,out_ms,total_ms,gpu_max_ms,total_max_ms,busy_pct;uint64_t samples;double keep_ms;uint64_t keep_dispatches;} StageStats;
 static void (*engine_set_gpu_options)(int);
-static int (*stream_stage_stats)(void*,StageStats*);static const char* (*stream_gpu_info)(void*);
+static int (*stream_stage_stats)(void*,StageStats*);static const char* (*stream_gpu_info)(void*);static const char* (*stream_error)(void*);
 static SRWLOCK stage_lock=SRWLOCK_INIT;static StageStats ui_stage;static char ui_gpu_info[512];static int ui_stage_valid;
+/* Why an engine could not start: in the log, the diagnostics (gpu_detail) and the Recommended settings page. */
+static void fg_engine_failed(void *stream){
+ char line[512];const char *why=stream_error?stream_error(stream):"";snprintf(line,sizeof line,"engine_error=%s",why&&*why?why:"unknown");
+ int fresh;AcquireSRWLockExclusive(&stage_lock);fresh=strcmp(ui_gpu_info,line)!=0;if(fresh)snprintf(ui_gpu_info,sizeof ui_gpu_info,"%s",line);ReleaseSRWLockExclusive(&stage_lock);
+ if(fresh)logline("FG_ENGINE_ERROR %s",line+13);
+}
 static int idle_all; /* CS_TEST_IDLE_ALL=1: process unchanged groups too (pre-2.0.1) */
 /* 2.2.4 (11-14, friend: "generation short" after updates): SC builds one root pipeline per scene preview. The scene thumbnail
  * pipeline gets the capture through a proxy and ran its own RIFE group on moving games, taking the GPU from the main picture
  * (5080 at 2100 MHz, SC 1.8.22.2, PS5 moving: thumbnail group 77.7% generated, main preview/recording group 16.8%).
  * The pipeline of the large preview (the D3D11 sink inside a GstBin, see pace_sink) is the main one; once it is known, groups in
  * any other pipeline pass their picture through like idle groups. CS_TEST_ALL_GROUPS=1 (test only) keeps the old behaviour. */
+static volatile LONG main_pipe_serial; /* counts changes of main_pipe */
 static char main_pipe[64];static SRWLOCK main_pipe_lock=SRWLOCK_INIT;static int all_groups;
 static volatile LONG reco_trial; /* 2.0.0: 권장 설정 trial running, publish stage times every 30 ticks */
 /* The preview and the record/stream route each run a stream; only one generates. The trial follows the first group
@@ -66,7 +73,7 @@ static _Thread_local int tick_new_dump; /* set by frame_buffer: this tick carrie
 #include "frame_dump.h"
 static LONG frame_force_model=-1; /* CS_TEST_MODEL=<id>: model without the toolbar (test) */
 static LONG frame_force_stable=-1; /* CS_TEST_STABLE=0|1: latency mode with an automatic buffer, without the toolbar (test) */
-typedef struct {int pipe_state;char pipe[64];int tl_slot,ever_changed,fp_set,idle_logged;uint64_t fp,idle_ticks;void *stream,*pool,*group;HANDLE initializer;volatile LONG init_state;int width,height,model,disabled,sn,sd,tn,td;uint64_t ticks,logical_ticks,cycle,pool_fallbacks;uint8_t *input;LONG applied,observed_toggle,generated_toggle;CsCadence cpu;FrameProof *proof;int64_t space_next;uint64_t space_frames,space_waits;double space_wait_ms;LONG gpu_options;} FrameContext;
+typedef struct {int pipe_state;LONG pipe_serial;char pipe[64];int tl_slot,ever_changed,fp_set,idle_logged;uint64_t fp,idle_ticks;void *stream,*pool,*group;HANDLE initializer;volatile LONG init_state;int width,height,model,disabled,sn,sd,tn,td;uint64_t ticks,logical_ticks,cycle,pool_fallbacks;uint8_t *input;LONG applied,observed_toggle,generated_toggle;CsCadence cpu;FrameProof *proof;int64_t space_next;uint64_t space_frames,space_waits;double space_wait_ms;LONG gpu_options;} FrameContext;
 static void frame_release(FrameContext *f){
  if(f->stream){CsStats s={0};stream_stats(f->stream,&s);
   logline("FG_STOP ticks=%llu generated=%llu repeat=%llu failures=%llu",(unsigned long long)s.ticks,(unsigned long long)s.generated,(unsigned long long)s.repeated,(unsigned long long)s.failures);
@@ -157,7 +164,7 @@ static int frame_buffer_impl(void *pad,void *info,void *data){
  }
  if(initialized!=2){CsStats pending={0};ui_publish(&pending,w,h,initialized<0?-1:0);return 1;}
  CsStats readiness={0};stream_stats(f->stream,&readiness);
- if(readiness.ready!=1){ui_publish(&readiness,w,h,readiness.ready<0?-1:0);return 1;}
+ if(readiness.ready!=1){if(readiness.ready<0)fg_engine_failed(f->stream);ui_publish(&readiness,w,h,readiness.ready<0?-1:0);return 1;}
  /* Settings window switches (30 fps cadence, HUD keep), applied to each new engine stream and on every change. */
  {static void* optStream;static LONG optApplied=-1;LONG opt=InterlockedCompareExchange(&engine_options,0,0);
   if(stream_set_options&&(f->stream!=optStream||opt!=optApplied)&&!stream_set_options(f->stream,opt&1,(opt>>1)&1)){optStream=f->stream;optApplied=opt;if(stream_set_quarter)stream_set_quarter(f->stream,(opt>>5)&1);logline("FG_OPTIONS cadence30=%ld hud_keep=%ld latency_priority=%ld",opt&1,(opt>>1)&1,(opt>>5)&1);}}
@@ -204,8 +211,6 @@ static int frame_buffer_impl(void *pad,void *info,void *data){
  ++f->ticks;++f->cycle;++f->logical_ticks;
  {static double logged=-1;double ms=stream_buffer_ns?stream_buffer_ns(f->stream)/1000000.0:0;ui_publish_buffer(ms);if(ms!=logged){logged=ms;logline("FG_BUFFER ms=%.2f",ms);}}
  ui_publish(&current,w,h,ok?0:-1);
- if(current.ready==-1&&stream_gpu_info){static void* errStream;if(errStream!=f->stream){const char* g=stream_gpu_info(f->stream);
-  if(g&&!strncmp(g,"engine_error=",13)){errStream=f->stream;AcquireSRWLockExclusive(&stage_lock);snprintf(ui_gpu_info,sizeof ui_gpu_info,"%s",g);ReleaseSRWLockExclusive(&stage_lock);logline("FG_ENGINE_ERROR %s",g+13);}}}
  if(InterlockedCompareExchange(&reco_trial,0,0)){AcquireSRWLockExclusive(&reco_lock);if(reco_group==f->group||(!reco_group&&current.generated+current.repeated>0)){reco_group=f->group;reco_cs=current;}ReleaseSRWLockExclusive(&reco_lock);}
  QueryPerformanceCounter(&cpuEnd);fps_duration(&f->cpu,1000.0*(cpuEnd.QuadPart-cpuStart.QuadPart)/cpuFreq.QuadPart,0);
  /* 1.9.6: game frame rate = changed images the engine accepted per second, over 2 s windows (see auto_content_x100). */
@@ -264,7 +269,9 @@ static int frame_buffer(void *pad,void *info,void *data){
   * through untouched: no engine, no copies. Live content changes within a frame, so real previews start at once.
   * CS_TEST_IDLE_ALL=1 (test only) restores the old behaviour. */
  /* Group in a pipeline other than the large preview's: pass through (see main_pipe). pipe_state 0 unknown, 1 main, 2 other. */
- if(!all_groups&&f->pipe_state!=1){
+ LONG pipeSerial=InterlockedCompareExchange(&main_pipe_serial,0,0);
+ if(!all_groups&&(f->pipe_state!=1||f->pipe_serial!=pipeSerial)){
+  f->pipe_serial=pipeSerial;
   if(!f->pipe[0]&&f->group){char *path=object_path(f->group);if(path){char *e=strstr(path+1,"/");size_t n=e?(size_t)(e-path)+1:strlen(path);if(n>=sizeof f->pipe)n=sizeof f->pipe-1;memcpy(f->pipe,path,n);f->pipe[n]=0;mem_free(path);}}
   char known[64];AcquireSRWLockShared(&main_pipe_lock);memcpy(known,main_pipe,sizeof known);ReleaseSRWLockShared(&main_pipe_lock);
   if(known[0]&&f->pipe[0]){int other=strcmp(known,f->pipe)!=0;if(f->pipe_state!=(other?2:1)){f->pipe_state=other?2:1;logline("FG_GROUP_ROLE group=%p pipeline=%s role=%s",f->group,f->pipe,other?"other (pass through)":"main");}if(other)return 1;}
@@ -318,7 +325,7 @@ static int load_engine(void){
  *(FARPROC*)&stream_destroy=GetProcAddress(m,synthetic?"cs_stream_destroy":"cs_live_destroy");
  *(FARPROC*)&stream_configure=GetProcAddress(m,synthetic?"cs_stream_configure_fraction":"cs_live_configure");
  *(FARPROC*)&stream_deadlines=GetProcAddress(m,synthetic?"cs_stream_deadline_misses":"cs_live_deadlines");
- if(!synthetic){*(FARPROC*)&stream_set_buffer=GetProcAddress(m,"cs_live_set_buffer_ms");*(FARPROC*)&stream_set_quarter=GetProcAddress(m,"cs_live_set_quarter");*(FARPROC*)&stream_set_low_buffer=GetProcAddress(m,"cs_live_set_low_buffer_ms");*(FARPROC*)&stream_set_options=GetProcAddress(m,"cs_live_set_options");*(FARPROC*)&stream_buffer_ns=GetProcAddress(m,"cs_live_buffer_ns");*(FARPROC*)&stream_tick_at=GetProcAddress(m,"cs_live_tick");*(FARPROC*)&stream_live_metrics=GetProcAddress(m,"cs_live_metrics");*(FARPROC*)&stream_stage_stats=GetProcAddress(m,"cs_live_stage_stats");*(FARPROC*)&stream_gpu_info=GetProcAddress(m,"cs_live_gpu_info");*(FARPROC*)&engine_set_gpu_options=GetProcAddress(m,"cs_set_gpu_options");}
+ if(!synthetic){*(FARPROC*)&stream_set_buffer=GetProcAddress(m,"cs_live_set_buffer_ms");*(FARPROC*)&stream_set_quarter=GetProcAddress(m,"cs_live_set_quarter");*(FARPROC*)&stream_set_low_buffer=GetProcAddress(m,"cs_live_set_low_buffer_ms");*(FARPROC*)&stream_set_options=GetProcAddress(m,"cs_live_set_options");*(FARPROC*)&stream_buffer_ns=GetProcAddress(m,"cs_live_buffer_ns");*(FARPROC*)&stream_tick_at=GetProcAddress(m,"cs_live_tick");*(FARPROC*)&stream_live_metrics=GetProcAddress(m,"cs_live_metrics");*(FARPROC*)&stream_stage_stats=GetProcAddress(m,"cs_live_stage_stats");*(FARPROC*)&stream_gpu_info=GetProcAddress(m,"cs_live_gpu_info");*(FARPROC*)&stream_error=GetProcAddress(m,"cs_live_error");*(FARPROC*)&engine_set_gpu_options=GetProcAddress(m,"cs_set_gpu_options");}
  if(!stream_create||!stream_tick||!stream_stats||!stream_destroy||!stream_configure||!stream_deadlines||(!synthetic&&(!stream_tick_at||!stream_live_metrics||!stream_buffer_ns||!stream_set_buffer||!live_create_format))){stream_create=NULL;FreeLibrary(m);return 0;}
  // Keep module loaded until process exit; live pad callbacks own worker handles.
  {const char* (*version)(void);*(FARPROC*)&version=GetProcAddress(m,"cs_engine_version");logline("FG_ENGINE_LOADED pid=%lu engine=%s",GetCurrentProcessId(),version?version():"unknown");}return 1;
@@ -350,7 +357,7 @@ static int catch_up_probe(void *pad,void *info,void *data){
  c->dropped++;catch_up_report(c,nowNs);return 0; /* GST_PAD_PROBE_DROP */
 }
 static void catch_up_free(void *data){HeapFree(GetProcessHeap(),0,data);}
-#include "gpu_probe.h" /* 2.3.3: GPU path in public and internal builds */
+#include "gpu_probe.h" /* 2.3.3: GPU path */
 static void *make_frame_filter(void){
  if(!load_engine())return NULL;
  if(!synthetic){void *gb=gpu_out_bin();if(gb)return gb;}

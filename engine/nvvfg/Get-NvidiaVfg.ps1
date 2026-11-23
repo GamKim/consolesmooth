@@ -1,4 +1,4 @@
-﻿# ConsoleSmooth 2.2.8 INTERNAL: one-click NVIDIA VFG runtime download (started from the model menu after the user agrees).
+﻿# ConsoleSmooth: one-click NVIDIA VFG runtime download (started from the model menu after the user agrees).
 # Source: the official NVIDIA package index https://pypi.nvidia.com/nvidia-vfx/ (no login). Nothing is downloaded from anywhere else.
 # Steps: download the wheel (zip) -> check SHA-256 -> unpack only the 5 runtime DLLs -> check each is NVIDIA-signed -> delete the wheel.
 param([string]$Dest = (Join-Path $env:LOCALAPPDATA 'ConsoleSmooth\nvidia-vfg'))

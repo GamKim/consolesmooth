@@ -4,8 +4,8 @@
  * D3D11 device, so Windows can flip it directly instead of composing it (the host's preview stays
  * Composed: Flip, about 2 refreshes behind). Pacing stays with the large preview sink's phase lock.
  * Esc, or another program becoming active on the same monitor, closes the window and the host's preview carries on
- * (1.8.4, 11-09 user: clicking a window on another monitor closed it; that now keeps it open); turning generation
- * off and on, or Apply, opens it again. 2.2.5 (11-14 user): Esc also turns generation off, so one press of the button or
+ * (1.8.4, 11-09: clicking a window on another monitor closed it; that now keeps it open); turning generation
+ * off and on, or Apply, opens it again. 2.2.5 (11-14): Esc also turns generation off, so one press of the button or
  * shortcut turns it back on in full screen; losing focus still only closes the window. No signal or a changed frame size closes it until frames return.
  * CS_TEST_DIRECT=1 keeps the test behaviour: closes only on Esc or after 300 s.
  * The fps readout is drawn into the frame: a window above this one would make Windows compose it again.
@@ -107,7 +107,7 @@ static void direct_close(LONG reason){
 static LRESULT CALLBACK direct_proc(HWND w,UINT m,WPARAM a,LPARAM b){
  /* Focus moved away: keep the window while the active window is on another monitor (checked now and every 250 ms),
   * (2.3.15: a window on this monitor no longer closes it, see below). WM_ACTIVATE also covers Streaming Center windows. */
- /* 2.3.15 (11-21 user: keep the full screen when another program is clicked): a window on this monitor no longer closes
+ /* 2.3.15 (11-21: keep the full screen when another program is clicked): a window on this monitor no longer closes
   * it; the full screen steps behind that window (no longer topmost) and keeps running, and comes back on top when it is
   * clicked or activated again. Windows on other monitors leave it on top as before (independent flip stays). */
  if(m==WM_ACTIVATE&&!direct_forced){if(LOWORD(a)!=WA_INACTIVE){KillTimer(w,DIRECT_FOCUS_TIMER);if(direct_behind){direct_behind=0;SetWindowPos(w,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE);logline("DIRECT_FOCUS_BACK");}}else{SetTimer(w,DIRECT_FOCUS_TIMER,250,NULL);PostMessageW(w,WM_TIMER,DIRECT_FOCUS_TIMER,0);}return DefWindowProcW(w,m,a,b);}
@@ -154,14 +154,22 @@ static int direct_tearing_supported(void){
  IDXGIFactory2 *factory=NULL;int ok=0;if(make_factory&&make_factory(&cs_iid_factory2,(void**)&factory)>=0){ok=direct_tearing_check(factory);IDXGIFactory2_Release(factory);}
  InterlockedExchange(&cached,ok);return ok;
 }
-static int direct_win_w;
+static int direct_win_w;static volatile LONG direct_hz_mhz; /* refresh of the monitor the full screen is on, 0 unknown */
+/* How long each step of opening the full screen took (ms since generation was turned on), one DIRECT_OPEN line per window. */
+static double direct_since_on(void){LARGE_INTEGER t,f;QueryPerformanceCounter(&t);QueryPerformanceFrequency(&f);LONG64 on=InterlockedCompareExchange64(&toggle_qpc,0,0);return on?1000.0*(double)(t.QuadPart-on)/(double)f.QuadPart:-1;}
+static volatile LONG direct_first_present;
+static void direct_presented(void){if(InterlockedExchange(&direct_first_present,0))logline("DIRECT_FIRST_PRESENT since_on_ms=%.0f sharpen=%ld hdr=%d",direct_since_on(),InterlockedCompareExchange(&direct_sharpen,0,0),hdr_on);}
 static int direct_create(void){
+ double at_start=direct_since_on(),at_hdr,at_device,at_chain,at_shader;
  HMODULE dxgi=LoadLibraryW(L"dxgi.dll"),d3d=LoadLibraryW(L"d3d11.dll"),fxc=LoadLibraryW(L"d3dcompiler_47.dll");if(!dxgi||!d3d||!fxc){logline("DIRECT_LOAD_FAILED");return 0;}
  HRESULT (WINAPI *make_factory)(REFIID,void**);HRESULT (WINAPI *make_device)(IDXGIAdapter*,D3D_DRIVER_TYPE,HMODULE,UINT,const D3D_FEATURE_LEVEL*,UINT,UINT,ID3D11Device**,D3D_FEATURE_LEVEL*,ID3D11DeviceContext**);CsCompile compile;
  *(FARPROC*)&make_factory=GetProcAddress(dxgi,"CreateDXGIFactory1");*(FARPROC*)&make_device=GetProcAddress(d3d,"D3D11CreateDevice");*(FARPROC*)&compile=GetProcAddress(fxc,"D3DCompile");if(!make_factory||!make_device||!compile)return 0;
  /* The host's awareness must not scale our window, or Windows would compose it. */
  HMODULE user=GetModuleHandleW(L"user32.dll");void *(WINAPI *set_dpi)(void*);*(FARPROC*)&set_dpi=user?GetProcAddress(user,"SetThreadDpiAwarenessContext"):NULL;if(set_dpi)set_dpi((void*)(intptr_t)-4);
  POINT origin={0,0};HMONITOR mon=MonitorFromPoint(origin,MONITOR_DEFAULTTOPRIMARY);direct_monitor=mon;MONITORINFO info={.cbSize=sizeof info};if(!GetMonitorInfoW(mon,&info))return 0;
+ {MONITORINFOEXW mx={.cbSize=sizeof mx};DEVMODEW dm={.dmSize=sizeof dm};LONG hz=0;
+  if(GetMonitorInfoW(mon,(MONITORINFO*)&mx)&&EnumDisplaySettingsW(mx.szDevice,ENUM_CURRENT_SETTINGS,&dm)&&dm.dmDisplayFrequency>=30)hz=(LONG)dm.dmDisplayFrequency*1000;
+  InterlockedExchange(&direct_hz_mhz,hz);} /* a 59/119/143 Hz mode reads one lower at most: the hold is then a little longer, never too short */
  int sw=info.rcMonitor.right-info.rcMonitor.left,sh=info.rcMonitor.bottom-info.rcMonitor.top,wx=info.rcMonitor.left,wy=info.rcMonitor.top;
  /* CS_TEST_DIRECT_WIN=<width>: a movable-size 16:9 window instead of the whole monitor, to see whether it can still avoid composition. */
  if(direct_win_w>0){sw=direct_win_w;sh=sw*9/16;wx+=200;wy+=200;}
@@ -179,7 +187,9 @@ static int direct_create(void){
    if(!want_hdr){logline("HDR_WINDOWS_NOT_READY");hdr_restore();}
   }else{want_hdr=0;logline("HDR_WINDOWS_UNAVAILABLE r=%d",r);}
  }
+ at_hdr=direct_since_on();
  HRESULT hr=make_device((IDXGIAdapter*)adapter,D3D_DRIVER_TYPE_UNKNOWN,NULL,want_hdr?D3D11_CREATE_DEVICE_VIDEO_SUPPORT:0,NULL,0,D3D11_SDK_VERSION,&direct_dev,NULL,&direct_ctx);if(hr<0){logline("DIRECT_DEVICE_FAILED hr=%08lx",(unsigned long)hr);return 0;}
+ at_device=direct_since_on();
  IDXGIDevice1 *dd=NULL;if(ID3D11Device_QueryInterface(direct_dev,&cs_iid_device1,(void**)&dd)>=0){IDXGIDevice1_SetMaximumFrameLatency(dd,1);IDXGIDevice1_Release(dd);}
  WNDCLASSW wc={.lpfnWndProc=direct_proc,.hInstance=GetModuleHandleW(NULL),.lpszClassName=L"ConsoleSmoothDirectTest"};RegisterClassW(&wc);
  direct_behind=0;direct_hwnd=CreateWindowExW(WS_EX_TOPMOST,wc.lpszClassName,L"ConsoleSmooth full screen",WS_POPUP,wx,wy,sw,sh,NULL,NULL,wc.hInstance,NULL);if(!direct_hwnd){logline("DIRECT_WINDOW_FAILED %lu",GetLastError());return 0;}
@@ -189,6 +199,7 @@ static int direct_create(void){
  hr=IDXGIFactory2_CreateSwapChainForHwnd(factory,(IUnknown*)direct_dev,direct_hwnd,&desc,NULL,NULL,&direct_chain);if(hr<0){logline("DIRECT_CHAIN_FAILED hr=%08lx",(unsigned long)hr);return 0;}
  if(hdr_on){IDXGISwapChain3 *c3=NULL;HRESULT ch=E_FAIL;if(IDXGISwapChain1_QueryInterface(direct_chain,&cs_iid_swapchain3,(void**)&c3)>=0){ch=IDXGISwapChain3_SetColorSpace1(c3,DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);IDXGISwapChain3_Release(c3);}
   logline("HDR_ON colorspace_hr=%08lx",(unsigned long)ch);if(ch<0){logline("HDR_COLORSPACE_FAILED");return 0;}}
+ at_chain=direct_since_on();
  ID3D11Texture2D *back=NULL;if(IDXGISwapChain1_GetBuffer(direct_chain,0,&cs_iid_texture,(void**)&back)<0)return 0;
  hr=ID3D11Device_CreateRenderTargetView(direct_dev,(ID3D11Resource*)back,NULL,&direct_rtv);ID3D11Texture2D_Release(back);if(hr<0)return 0;
  D3D11_TEXTURE2D_DESC td={.Width=(UINT)direct_w,.Height=(UINT)direct_h,.MipLevels=1,.ArraySize=1,.Format=DXGI_FORMAT_B8G8R8A8_UNORM,.SampleDesc={1,0},.Usage=D3D11_USAGE_DYNAMIC,.BindFlags=D3D11_BIND_SHADER_RESOURCE,.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE};
@@ -196,9 +207,12 @@ static int direct_create(void){
  ID3DBlob *vb=NULL,*pb=NULL;if(!direct_shader(compile,direct_vs_src,"vs_5_0",&vb)||!direct_shader(compile,direct_ps_src,"ps_5_0",&pb))return 0;
  hr=ID3D11Device_CreateVertexShader(direct_dev,ID3D10Blob_GetBufferPointer(vb),ID3D10Blob_GetBufferSize(vb),NULL,&direct_vs);if(hr>=0)hr=ID3D11Device_CreatePixelShader(direct_dev,ID3D10Blob_GetBufferPointer(pb),ID3D10Blob_GetBufferSize(pb),NULL,&direct_ps);if(hr<0)return 0;
  {ID3DBlob *sb=NULL;if(direct_shader(compile,direct_ps_sharp_src,"ps_5_0",&sb)){if(ID3D11Device_CreatePixelShader(direct_dev,ID3D10Blob_GetBufferPointer(sb),ID3D10Blob_GetBufferSize(sb),NULL,&direct_ps_sharp)<0)direct_ps_sharp=NULL;}logline("DIRECT_SHARPEN_SHADER ok=%d",direct_ps_sharp!=NULL);}
+ at_shader=direct_since_on();
  D3D11_SAMPLER_DESC sd={.Filter=D3D11_FILTER_MIN_MAG_MIP_LINEAR,.AddressU=D3D11_TEXTURE_ADDRESS_CLAMP,.AddressV=D3D11_TEXTURE_ADDRESS_CLAMP,.AddressW=D3D11_TEXTURE_ADDRESS_CLAMP,.MaxLOD=D3D11_FLOAT32_MAX};if(ID3D11Device_CreateSamplerState(direct_dev,&sd,&direct_sampler)<0)return 0;
  direct_view=(D3D11_VIEWPORT){0,0,(float)sw,(float)sh,0,1};
  ShowWindow(direct_hwnd,SW_SHOW);SetForegroundWindow(direct_hwnd);if(direct_forced)SetTimer(direct_hwnd,1,300000,NULL);
+ logline("DIRECT_OPEN since_on_ms start=%.0f windows_hdr=%.0f device=%.0f window_hdr_chain=%.0f shaders=%.0f ready=%.0f sharpen=%ld hdr=%d",at_start,at_hdr,at_device,at_chain,at_shader,direct_since_on(),InterlockedCompareExchange(&direct_sharpen,0,0),hdr_on);
+ InterlockedExchange(&direct_first_present,1);
  logline("DIRECT_READY monitor=%dx%d frame=%dx%d tearing=%d sync=%ld",sw,sh,direct_w,direct_h,direct_tearing,InterlockedCompareExchange(&direct_sync,0,0));return 1;
 }
 static DWORD WINAPI direct_thread(void *unused){
@@ -243,7 +257,7 @@ static int direct_show(void){
   /* 2.2.4: variable refresh / sync off present at once with tearing allowed: a G-Sync/FreeSync monitor then refreshes when the frame arrives. */
   LONG sync=InterlockedCompareExchange(&direct_sync,0,0);
   QueryPerformanceCounter(&b);hr=sync&&direct_tearing?IDXGISwapChain1_Present(direct_chain,0,DXGI_PRESENT_ALLOW_TEARING):IDXGISwapChain1_Present(direct_chain,1,DXGI_PRESENT_DO_NOT_WAIT);QueryPerformanceCounter(&c);
-  if(hr==DXGI_ERROR_WAS_STILL_DRAWING){++direct_skips;hr=S_OK;}
+  if(hr==DXGI_ERROR_WAS_STILL_DRAWING){++direct_skips;hr=S_OK;}else if(hr>=0)direct_presented();
   direct_copy_ms+=1000.0*(b.QuadPart-a.QuadPart)/f.QuadPart;direct_present_ms+=1000.0*(c.QuadPart-b.QuadPart)/f.QuadPart;
   if(++direct_presents%600==0){logline("DIRECT_STATS presents=%lld repeats=%lld skips=%lld draw_avg_ms=%.2f present_avg_ms=%.2f",(long long)direct_presents,(long long)direct_repeats,(long long)direct_skips,direct_copy_ms/600,direct_present_ms/600);direct_copy_ms=direct_present_ms=0;}
  }

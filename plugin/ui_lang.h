@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /* 1.9.3: UI language. English unless Streaming Center itself runs in Korean: SC keeps its own UI language in
  * HKCU\Software\AVerMedia\StreamingCenter\Global\AppLanguage ("ko_KR" on a Korean SC). Without that value the
  * Windows UI language decides. CS_TEST_LANG=ko|en overrides (own checks only). Read once, on first use. */

@@ -73,6 +73,13 @@ static void logline(const char *fmt,...) {
 }
 #include "framegen.h"
 #include "auto_capture.h"
+/* The host is closing (its window is being destroyed). */
+/* The settings panel exists again (the host rebuilt its window): device polling may run. */
+static void ui_host_opened(void){InterlockedExchange(&auto_stopping,0);if(InterlockedCompareExchange(&auto_capture_count,0,0)>0)device_start();}
+static void ui_host_closing(void){
+ direct_close(-2);hdr_restore(); /* closing the host with the HDR full screen open left Windows HDR on */
+ if(device_thread)WaitForSingleObject(device_thread,1500); /* the device poll ends before the host shuts the SDK down */
+}
 /* On by default since 1.7.9 (CS_TEST_ORIGINAL_DEDUP=0 turns it off): the host steps its compositor to the generation rate, and the encoder branch
  * thins that back with videorate. Sampling two unlocked clocks repeated 20-27% of frames in a 60 fps stream (plain host: 0).
  * frame_buffer marks each tick whose picture changed; the original route forwards only those. */
@@ -82,7 +89,7 @@ static int record_mode;
 static void record_watch_free(void *data){RecordWatch *w=data;logline("RECORD_ROUTE_STOP generated_mode=%d buffers=%llu originals=%llu missing=%llu dedup_dropped=%llu",w->generated,(unsigned long long)w->count,(unsigned long long)w->restored,(unsigned long long)w->missing,(unsigned long long)w->dropped);AcquireSRWLockExclusive(&auto_filter_lock);InterlockedDecrement(&record_branches);ReleaseSRWLockExclusive(&auto_filter_lock);HeapFree(GetProcessHeap(),0,w);}
 static int record_buffer(void *pad,void *info,void *data){
  (void)pad;RecordWatch *w=data;++w->count;
- /* 2.3.8 (11-18 user): recording and streaming go on while the low latency view is shown (2.2.0-2.3.7 dropped them; turning the
+ /* 2.3.8 (11-18): recording and streaming go on while the low latency view is shown (2.2.0-2.3.7 dropped them; turning the
   * view on mid-recording froze the file). The view window is fed separately, so the record route simply keeps its frames. */
  if(w->generated)return 1;
  /* 2.3.7: GPU path (originals): its buffers carry no original qdata; pass everything except buffers it marked generated. */
@@ -105,9 +112,9 @@ static int record_watch(void *src,void *sink){
  if(!InterlockedCompareExchange(&record_branches,0,0)){
   record_rate=auto_snapshot();if(auto_applied_rate.supported){record_rate.tn=auto_applied_rate.tn;record_rate.td=auto_applied_rate.td;}
   /* 1.7.1: "generated frames" only while generation is really running when the recording starts; otherwise the
-   * file kept the generation rate with every image twice (user decision 11-07: save the originals instead). */
+   * file kept the generation rate with every image twice (11-07: save the originals instead). */
   int want=InterlockedCompareExchange(&record_generated,0,0),running=InterlockedCompareExchange(&frame_generating,0,0)!=0||InterlockedCompareExchange(&gpu_gen_running,0,0)!=0;
-  /* 2.3.9 (11-18 user): "생성 프레임 포함" records at the chosen output rate from the start, whether generation is on yet or not
+  /* 2.3.9 (11-18): "생성 프레임 포함" records at the chosen output rate from the start, whether generation is on yet or not
    * (while it is off each picture repeats). Turning generation on or off during a recording or stream then just works. */
   record_mode=want;if(want&&!running)logline("RECORD_GENERATED_RATE generation_not_running_yet=1 saving=output_rate");
  }
@@ -286,7 +293,7 @@ static void on_link(void *self,uint64_t ts,void *src,void *sink,int result){
  if(result==0&&a&&b&&((strstr(a,"/GstKsVideoSrc:")&&strstr(b,"/GstCapsFilter:"))||strstr(a,"/GstMFVideoSrc:"))){auto_watch_capture(src);
   /* 2.2.4: the pipeline holding the capture source feeds the large preview (a detached GstBin, no pipeline in its path) and
    * recording; scene previews get the capture through proxies. It is the main generation pipeline (framegen.h main_pipe). */
-  if(!strncmp(a,"/GstPipeline:",13)){char *e=strstr(a+1,"/");size_t n=e?(size_t)(e-a)+1:0;if(n&&n<sizeof main_pipe){AcquireSRWLockExclusive(&main_pipe_lock);memcpy(main_pipe,a,n);main_pipe[n]=0;ReleaseSRWLockExclusive(&main_pipe_lock);logline("FG_MAIN_PIPELINE %s",main_pipe);}}}
+  if(!strncmp(a,"/GstPipeline:",13)){char *e=strstr(a+1,"/");size_t n=e?(size_t)(e-a)+1:0;if(n&&n<sizeof main_pipe){AcquireSRWLockExclusive(&main_pipe_lock);if(strncmp(main_pipe,a,n)||main_pipe[n]){memcpy(main_pipe,a,n);main_pipe[n]=0;InterlockedIncrement(&main_pipe_serial);}ReleaseSRWLockExclusive(&main_pipe_lock);logline("FG_MAIN_PIPELINE %s",main_pipe);}}}
  if(framegen_fps&&result==0&&a&&b&&strncmp(a,"/GstPipeline:",13)==0&&strstr(a,"/GstProxySrc:")&&strstr(b,"/GstAvtD3D11Transformation:"))record_watch(src,sink);
  /* Visual synthetic testing identified the root pipeline sink as the scene
   * thumbnail; the detached GstBin sink is the large editor preview. */

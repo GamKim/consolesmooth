@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MIT
  * Host check before the plugin activates.
- * 1.8.2 (11-09 user decision: newer Streaming Center versions should still turn on): the tested build (1.8.22.2,
+ * 1.8.2 (11-09: newer Streaming Center versions should still turn on): the tested build (1.8.22.2,
  * SHA-256 below) is "verified"; any other StreamingCenter.exe is accepted when its Authenticode signature is valid
  * and signed by AVerMedia, and the loaded GStreamer is 1.x with x >= 18 (the plugin uses the stable public 1.x ABI).
  * Version-specific parts stay fail-closed on their own: the GC573 SDK adapter checks avtsdk.dll's hash and otherwise

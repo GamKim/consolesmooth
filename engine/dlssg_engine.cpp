@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
-// 2.2.8 INTERNAL ONLY (CS_INTERNAL_DLSSG): NVIDIA DLSS Frame Generation through the public NGX DLSSG API, offscreen.
-// The NGX/D3D12 part lives in cs_dlssg.dll (built only for internal packages from E:\fpstest\dlssg-ngx, public DLSS SDK
-// headers). No NVIDIA binary is shipped: nvngx_dlssg.dll is copied by the user from the NVIDIA app's own DLSS cache
+// NVIDIA DLSS Frame Generation through the public NGX DLSSG API, offscreen.
+// The NGX/D3D12 part lives in cs_dlssg.dll (engine/dlssg/dlssg_ngx.cpp, public DLSS SDK headers).
+// nvngx_dlssg.dll is bundled in the installer (NVIDIA RTX SDKs license); a newer one can be copied from the NVIDIA app's DLSS cache
 // (engines\dlssg\Get-NvidiaDlssg.ps1) into %LOCALAPPDATA%\ConsoleSmooth\nvidia-dlssg, or found via CS_DLSSG_DIR.
-// RTX 40/50 only. 2x; 3x/4x (multi-frame, RTX 50) since 11-17. Motion vectors are zero: DLSS-G's own optical flow handles the video (11-17:
-// 38.72 dB on the 30->60 Zelda test vs Veyra DLSS FG 38.41, ~0.85 ms GPU at 1080p).
+// 2x; 3x/4x (multi-frame, RTX 50) since 11-17. Motion vectors are zero: DLSS-G's own optical flow handles the video (11-17:
+// 38.72 dB on the 30->60 Zelda test, ~0.85 ms GPU at 1080p).
 #include <windows.h>
 #include "seq_engines.h"
 #include <string>

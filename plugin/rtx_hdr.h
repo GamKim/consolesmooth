@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT
- * 2.3.13 (11-19 user: HDR control in the full screen; the driver's RTX Video HDR, nothing to download):
+ * 2.3.13 (11-19: HDR control in the full screen; the driver's RTX Video HDR, nothing to download):
  * the full-screen window can show the picture as HDR10 through NVIDIA RTX Video HDR (TrueHDR). The driver applies
  * it in the D3D11 video processor when the stream extension below is set (same call as mpv's d3d11vpp
  * nvidia-true-hdr and VLC: GUID fdd62bb4-..., {version 4, method 3, enable 1}). Output: R10G10B10A2, PQ / BT.2020.
