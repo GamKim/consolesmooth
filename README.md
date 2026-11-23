@@ -6,55 +6,23 @@ An **unofficial, free frame generation plugin** for AVerMedia Streaming Center. 
 
 This is a personal project, not affiliated with AVerMedia, and it contains no AVerMedia programs or files.
 
-**New here? Follow the [guide](docs/GUIDE.md)** (install, first run, settings, troubleshooting).
+**New here?** [5-minute quick start](docs/QUICK-START.en.md) · [Full guide](docs/GUIDE.md) (install, settings, troubleshooting) · [Downloads and release notes](https://github.com/GamKim/consolesmooth/releases)
 
 **Test results at a glance: https://gamkim.github.io/consolesmooth/** (latency and quality tables with the comparison videos, in Korean)
-
-## What is new in 1.1.5
-
-- **Works on PCs without `vulkan-1.dll`.** The graphics driver normally installs this file; without it the engine could not be opened and nothing was generated (`FG_ENGINE_LOAD_FAILED win32=126` in the diagnostics). The installer now includes the official file (LunarG) and uses it only when Windows has none. The Windows folder is not changed. If the Vulkan part of the graphics driver itself is missing, reinstall the driver.
-- When the engine file cannot be opened, the settings window, the failed Recommended settings page and the diagnostics say why.
-
-## What is new in 1.1.4
-
-- **Full screen turns the low latency view on.** Pick Full screen when you play and you get the fastest path (Window turns the low latency view off).
-- **Full screen stays open when you click other programs.** It stays on top while you use a window on another monitor; a window on the same monitor or Alt+Tab moves it behind for a while, and clicking it brings it back.
-- **Latency on the bottom status line of the settings window:** `On · fast path · original→screen X ms` (measured inside the program).
-- When the frame generation engine cannot start, the reason shows in the diagnostics and on the failed Recommended settings page. If something goes wrong, attach the file from Advanced tab → export diagnostics to an [issue](https://github.com/GamKim/consolesmooth/issues).
-- If the graphics card cannot be opened on the first try, it tries once more with other programs' Vulkan overlays (RivaTuner, Overwolf, Steam, Discord, ReShade …) turned off. The diagnostics now include the Windows build and Insider channel, graphics driver versions and the installed Vulkan overlays.
-- 5-minute quick start in Korean, English, Chinese and Japanese: [docs/QUICK-START.en.md](docs/QUICK-START.en.md) · How we measure: [docs/MEASUREMENT.md](docs/MEASUREMENT.md)
-- Latency is the same as 1.1.3 (240 fps recording next to the passthrough, within 4 ms).
-
-## What is new in 1.1.3
-
-- **3x/4x with NVIDIA Video Frame Generation and RIFE**: NVIDIA Video Frame Generation always uses the fast path, which made only one picture between originals, so 3x/4x gave 2x. The fast path now makes 2 (3x) or 3 (4x) pictures for NVIDIA Video Frame Generation, RIFE 4.6 and RIFE 4.15 lite, in the low latency view and in recording/streaming. 30 fps game at 4x = 120 new pictures per second (RTX 5080, no drops).
-- FSR 3, DLSS Frame Generation and AMD FSR Frame Generation stay 2x on the fast path; 3x/4x use the standard path as before.
-
-## What is new in 1.1.2
-
-- **Generated frames are shown briefly**: generated frames are softer than originals (about 50-70% of the sharpness in every model), so showing them half the time made heads and edges smear and the picture flicker. With low latency view + full screen, a generated frame is now shown for about 8 ms and the original for about 25 ms (30 fps games). Display tab → **Show generated frames briefly** (on by default); turn it off for even spacing as in 1.1.1.
-- **RTX Video HDR**: Advanced tab → **RTX Video HDR** shows the full screen in HDR with the NVIDIA driver's RTX Video HDR (nothing to download). Needs an NVIDIA RTX GPU and an HDR monitor; Windows HDR is turned on only while the full screen is open if it was off. Recording and streaming are unchanged.
-- **30 fps smoothing keeps the fast path**: RIFE, FSR 3, AMD FSR Frame Generation and DLSS Frame Generation no longer fall back to the standard path, so GPU use drops a lot (GTA VI, RIFE 4.6: 52% → 15-17%).
-
-## What is new in 1.1.1
-
-- **Recording and streaming**: they go on while the low latency view is shown, and with the recording source "With generated" they run at the output rate from the start, so generation can be turned on later. Fixed empty recordings and missing generated frames in 30 fps games on the fast path. Measured: 60 fps game 60 → 120 new pictures per second, 30 fps game 30 → 60 (recording and a local stream test).
-
-## What is new in 1.1.0
-
-- **Low latency view is a regular feature**: with frame generation on, the picture appears only **about 9 to 19 ms** after the original (passthrough). 1.0.1 took 77 to 87 ms (RIFE, FSR 3). It is even earlier than the default Streaming Center preview without generation (about 32 ms).
-- **Six models**: RIFE 4.6, RIFE 4.15 lite, FSR 3, AMD FSR Frame Generation, NVIDIA Video Frame Generation, NVIDIA DLSS Frame Generation.
-- **Recommended settings** measure the graphics card and pick the generation buffer between 15 and 25 ms.
 
 ## Features
 
 - **Works inside Streaming Center**: no window capture or overlay. Turn it on and off with the toolbar button or a shortcut (Ctrl+Alt+F by default, changeable in the Advanced tab). In full screen, Esc closes it and turns generation off. The settings window only chooses and saves; settings apply when you turn it on.
-- **Low latency view**: the on button or shortcut shows the picture in full screen right away. With low latency view + full screen + 2x, frames are made on the graphics card and sent straight to the screen (the fast path). Recording and streaming go on while it is shown.
+- **Full screen (low latency view)**: choosing Full screen turns the low latency view on with it, and frames are made on the graphics card and sent straight to the screen (the fast path). Recording and streaming go on while it is shown.
+  - It stays open while you use windows on another monitor; a window on the same monitor or Alt+Tab moves it behind for a while, and clicking it brings it back.
+  - On the fast path the bottom line of the settings window shows the latency (measured inside the program).
+  - Made frames are shown briefly (about 8 ms) and originals longer (about 25 ms) to reduce smear and flicker (30 fps game at 2x; can be turned off).
   - The fast path is chosen when Streaming Center starts. If you change the model or display settings, the settings window tells you to restart.
   - If the fast path does not work on a PC, the next start uses the standard path automatically.
 - **Record and stream generated frames**: with the recording source set to "With generated", recording and streaming run at the output rate (e.g. 120 fps) from the start. Turning generation or the low latency view on or off during a recording or stream does not interrupt it (while generation is off, each picture repeats). New pictures per second = game fps × multiplier (60 fps game at 2x → 120, 30 fps game at 2x → 60).
 - **On-screen display protection (HUD keep)**: fixed screen elements such as health bars, maps and button prompts (semi-transparent ones too) are taken from the original to reduce wobble.
 - **30 fps smoothing**: shows 30 fps games evenly at game fps × multiplier (2x → 30 → 60, every 16.7 ms). About +8 ms latency.
+- **RTX Video HDR**: shows the full screen in HDR on an NVIDIA RTX GPU with an HDR monitor (recording and streaming unchanged).
 - **On-screen numbers**: `input / now fps` by default (capture signal / pictures shown per second, e.g. 60 / 120).
 - **Display sync**: V-Sync (default) / variable refresh (G-Sync, FreeSync) / off.
 - **59.94 Hz input (PS5)**, **recommended settings** (a real test run plus the graphics card and the monitor's variable refresh support), Korean and English.
@@ -75,14 +43,14 @@ Score of the 60 fps made from the same 30 fps input against a real 60 fps record
 ## Requirements
 
 - AVerMedia capture card + Streaming Center 1.8.22.2 or the latest 1.9.19.1 x64 (tested: Live Gamer 4K GC573, GC313 Pro, GC553 Pro)
-- Windows 10/11 x64
+- Windows 10/11 x64 and a graphics driver with Vulkan (if Windows has no `vulkan-1.dll`, the official file in the installer is used)
 - Graphics card: see the model table. Minimum: **AMD Radeon RX 6600** (FHD 60 → 120 fps, checked on the standard path). GeForce: about RTX 2060 for FSR 3, RTX 3070 / 4060 or better for RIFE (approximate).
 - A monitor of 120 Hz or more
 - For 120 fps recordings raise the Streaming Center recording bitrate to 40\~50 Mbps.
 
 ## Install
 
-Download `ConsoleSmooth-Plugin-Setup-1.1.5.exe` from [Releases](https://github.com/GamKim/consolesmooth/releases) and run it. The installer is not signed; if SmartScreen warns, choose "More info → Run anyway". Illustrated guide: [docs/GUIDE.md](docs/GUIDE.md). All settings: [installer/INSTALL-README-EN.txt](installer/INSTALL-README-EN.txt).
+Download `ConsoleSmooth-Plugin-Setup-<version>.exe` from [Releases](https://github.com/GamKim/consolesmooth/releases) and run it. The installer is not signed; if SmartScreen warns, choose "More info → Run anyway". Illustrated guide: [docs/GUIDE.md](docs/GUIDE.md). All settings: [installer/INSTALL-README-EN.txt](installer/INSTALL-README-EN.txt).
 
 ## Uninstall
 
@@ -92,18 +60,17 @@ Close Streaming Center, run `Uninstall.exe` in the `Plugin\ConsoleSmooth` folder
 
 ### Latency (how long after the original passthrough picture)
 
-A 240 fps phone filmed the original monitor and the PC screen together; the time between the sword trail appearing on the two screens was measured (Switch 2 Zelda, average of 3 swings).
+A 240 fps phone filmed the original monitor and the PC screen together; the time between the sword trail appearing on the two screens was measured (Switch 2 Zelda, average of 3 swings). Measured with ConsoleSmooth 1.1.0.
 
 | Screen | Generation | Latency |
 |---|---|---|
-| ConsoleSmooth 1.1.0 low latency view · FSR 3 | on | 8.8 ms |
-| ConsoleSmooth 1.1.0 low latency view · RIFE 4.6 | on | 11.8 ms |
-| ConsoleSmooth 1.1.0 low latency view · AMD FSR Frame Generation | on | 12.5 ms |
-| ConsoleSmooth 1.1.0 low latency view · NVIDIA Video Frame Generation | on | 12.6 ms |
-| ConsoleSmooth 1.1.0 low latency view · RIFE 4.15 lite | on | 12.7 ms |
-| ConsoleSmooth 1.1.0 low latency view · NVIDIA DLSS Frame Generation | on | 19.0 ms |
+| ConsoleSmooth low latency view · FSR 3 | on | 8.8 ms |
+| ConsoleSmooth low latency view · RIFE 4.6 | on | 11.8 ms |
+| ConsoleSmooth low latency view · AMD FSR Frame Generation | on | 12.5 ms |
+| ConsoleSmooth low latency view · NVIDIA Video Frame Generation | on | 12.6 ms |
+| ConsoleSmooth low latency view · RIFE 4.15 lite | on | 12.7 ms |
+| ConsoleSmooth low latency view · NVIDIA DLSS Frame Generation | on | 19.0 ms |
 | Streaming Center default preview | off | 31.9 ms |
-| ConsoleSmooth 1.0.1 low latency view · RIFE 4.6 / FSR 3 | on | 83.0 / 76.7 ms |
 
 It is still later than the passthrough, so for fighting or rhythm games use the passthrough screen.
 
@@ -140,11 +107,11 @@ More videos and settings window pictures are in [media](media/README.md).
 
 ## Limits
 
-- The fast path of the low latency view is used at 2x only. 3x/4x, target fps, 30 fps smoothing, stable mode and laptops with two graphics cards use the standard path (generation buffer 15 to 25 ms).
+- The fast path is used at 2x, and at 3x/4x too with NVIDIA Video Frame Generation and RIFE. Stable mode, other multipliers or target fps, and laptops with two graphics cards use the standard path (generation buffer 15 to 25 ms); NVIDIA Video Frame Generation always uses the fast path.
 - The fast path was tested on an RTX 5080 only. Please report problems on other graphics cards in [Issues](https://github.com/GamKim/consolesmooth/issues).
 - Very fast camera turns can make the background ripple a little. In 30 fps games a face can ripple when the head turns suddenly.
 - In third-person games a character standing still for a long time can be taken for an on-screen element (hair tips break → turn display protection off).
-- HDR, 10-bit and 8K are not supported. Input 30\~120 fps (including 29.97, 59.94, 119.88).
+- HDR or 10-bit input and 8K are not supported. Input 30\~120 fps (including 29.97, 59.94, 119.88).
 - A new Streaming Center version may need checking again.
 
 ## Layout
