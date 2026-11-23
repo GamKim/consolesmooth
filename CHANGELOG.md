@@ -15,7 +15,7 @@
 - **The reason for a failed start is in the diagnostics.** When the frame generation engine cannot start (the graphics card cannot be opened, a model file is missing, …), the reason is written to the log (`FG_ENGINE_ERROR`), to the exported diagnostics (`gpu_detail engine_error=…`) and to the failed Recommended settings page (report: RX 9070 XT, both RIFE and FSR 3 failed with no reason shown).
 - **Retry without Vulkan overlay layers.** If the graphics card cannot be opened on the first try, the engine tries once more with the Vulkan overlay layers of other programs (RivaTuner, Overwolf, Steam, Discord, ReShade …) turned off for ConsoleSmooth only. A PC that starts normally never reaches the retry. The diagnostics show when the retry was used (`implicit_layers=off`).
 - **The diagnostics now list the three usual suspects:** Windows build and Insider channel (`windows_build=… insider=…`), graphics driver versions (`gpu_driver …`) and the installed Vulkan overlay layers (`vulkan_implicit_layer …`).
-- New guides: 5-minute quick start in Korean, English, Chinese and Japanese (`docs/QUICK-START.*.md`) and how latency and quality are measured (`docs/MEASUREMENT.md`).
+- New guides: 5-minute quick start in Korean and English (`docs/QUICK-START.*.md`) and how latency and quality are measured (`docs/MEASUREMENT.md`).
 - Latency unchanged (RTX 5080, PS5 GTA VI, NVIDIA Video Frame Generation 2x, full screen): the presentation mode stays Hardware: Independent Flip while another monitor is clicked and after Alt+Tab, and a 240 fps phone recording of passthrough and PC screen showed the same delay as 1.1.3 within one camera frame (4 ms).
 
 ## 1.1.3 — 3x and 4x with NVIDIA Video Frame Generation and RIFE (2026-11-20)

@@ -1,6 +1,6 @@
 # ConsoleSmooth 5분 시작 (GTA6 · Switch 2)
 
-[English](QUICK-START.en.md) · [简体中文](QUICK-START.zh.md) · [日本語](QUICK-START.ja.md) · [자세한 사용법](GUIDE.ko.md)
+[English](QUICK-START.en.md) · [자세한 사용법](GUIDE.ko.md)
 
 AVerMedia 캡처보드와 **Streaming Center**를 이미 쓰고 있다면 프로그램을 더 깔지 않아도 돼요. 플러그인 하나만 설치하면 PS5 GTA6 30fps를 60fps로, Switch 2 60fps를 120fps로 볼 수 있어요.
 
@@ -24,7 +24,7 @@ AVerMedia 캡처보드와 **Streaming Center**를 이미 쓰고 있다면 프로
 
 | 게임 | 배수 | 메모 |
 |---|---|---|
-| PS5 GTA6 (30fps) | **2배** → 60 | 3배·4배(→90·120)도 되지만 지연과 깨짐이 늘어요. 처음에는 2배를 권해요. |
+| PS5 GTA6 (30fps) | **2배** → 60 | 3배·4배(→90·120)도 되지만 지연과 깨짐이 늘어요. 처음에는 2배를 권해요. **GTA6을 할 때는 Streaming Center의 소스 편집에서 입력을 30 FPS로 설정하는 것을 권장해요.** |
 | Switch 2 (60fps) | **2배** → 120 | 120Hz 모니터에 맞아요. |
 | 격투·리듬·FPS·경쟁 게임 | 쓰지 않기 | 화면이 원본보다 늦게 보여서 판정이 중요한 게임에는 맞지 않아요. |
 

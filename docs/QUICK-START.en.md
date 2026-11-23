@@ -1,6 +1,6 @@
 # ConsoleSmooth in 5 minutes (GTA VI · Switch 2)
 
-[한국어](QUICK-START.ko.md) · [简体中文](QUICK-START.zh.md) · [日本語](QUICK-START.ja.md) · [Full guide](GUIDE.md)
+[한국어](QUICK-START.ko.md) · [Full guide](GUIDE.md)
 
 If you already use an AVerMedia capture card with **AVerMedia Streaming Center**, you don't need another program. Install one plugin and watch PS5 GTA VI at 60 fps instead of 30, or Switch 2 at 120 fps instead of 60.
 
@@ -24,7 +24,7 @@ If you already use an AVerMedia capture card with **AVerMedia Streaming Center**
 
 | Game | Multiplier | Note |
 |---|---|---|
-| PS5 GTA VI (30 fps) | **2x** → 60 | 3x and 4x (→ 90, 120) work too, but add latency and artifacts. Start with 2x. |
+| PS5 GTA VI (30 fps) | **2x** → 60 | 3x and 4x (→ 90, 120) work too, but add latency and artifacts. Start with 2x. **For GTA VI we recommend setting the source input to 30 FPS in the Streaming Center source settings.** |
 | Switch 2 (60 fps) | **2x** → 120 | Fits a 120 Hz monitor. |
 | Fighting, rhythm, shooters, competitive games | Don't use it | The picture shows up later than the original, which hurts timing-critical games. |
 
