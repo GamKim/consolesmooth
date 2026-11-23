@@ -36,7 +36,7 @@ static DWORD WINAPI ui_reco_worker(void *unused){
  if(r->resume)Sleep(1500); /* generation was just turned off: let the live engine stop */
  wchar_t dir[32768],dll[32768],model[32768];DWORD n=GetEnvironmentVariableW(L"CS_ENGINE_DIR",dir,32000);
  HMODULE m=NULL;
- if(n&&n<32000){swprintf(dll,32768,L"%ls\\consolesmooth_engine.dll",dir);m=LoadLibraryExW(dll,NULL,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);}
+ if(n&&n<32000){vulkan_prepare(dir);swprintf(dll,32768,L"%ls\\consolesmooth_engine.dll",dir);m=LoadLibraryExW(dll,NULL,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);}
  void *(*create)(const wchar_t*,int)=NULL;void (*destroy)(void*)=NULL;void (*floor_set)(void*,int)=NULL;void (*options)(int)=NULL;double (*last)(void*)=NULL;
  int (*run)(void*,const uint8_t*,const uint8_t*,int,int,float,uint8_t*,uint64_t,uint64_t)=NULL;const char *(*err)(void)=NULL;
  if(m){*(FARPROC*)&create=GetProcAddress(m,"cs_create");*(FARPROC*)&destroy=GetProcAddress(m,"cs_destroy");*(FARPROC*)&floor_set=GetProcAddress(m,"cs_set_flow_floor");
@@ -76,11 +76,11 @@ static void reco_try(int model,double *ms,double *gen){
  AcquireSRWLockExclusive(&reco_lock);reco_group=NULL;memset(&reco_cs,0,sizeof reco_cs);ReleaseSRWLockExclusive(&reco_lock);
  AcquireSRWLockExclusive(&stage_lock);ui_stage_valid=0;ui_gpu_info[0]=0;ReleaseSRWLockExclusive(&stage_lock);
  ULONGLONG start=GetTickCount64();CsStats s=reco_stats();
- while(GetTickCount64()-start<10000){Sleep(100);s=reco_stats();if(s.ready==1&&s.generated+s.repeated>0)break;}
+ while(GetTickCount64()-start<10000&&!engine_load_reason()[0]){Sleep(100);s=reco_stats();if(s.ready==1&&s.generated+s.repeated>0)break;}
  if(s.ready!=1){
   /* 1.1.4 (11-21): say why in the log and on the failure page (9070 XT report had no reason). */
   char g[512];AcquireSRWLockShared(&stage_lock);memcpy(g,ui_gpu_info,sizeof g);ReleaseSRWLockShared(&stage_lock);
-  const char* why=!strncmp(g,"engine_error=",13)?g+13:"engine did not start in 10 s";
+  const char* load=engine_load_reason();const char* why=load[0]?load:!strncmp(g,"engine_error=",13)?g+13:"engine did not start in 10 s";
   logline("UI_RECO_TRIAL model=%s failed ready=%d reason=%s",cs_models[model].name,s.ready,why);
   size_t n=strlen(ui_reco.error);snprintf(ui_reco.error+n,sizeof ui_reco.error-n,"%s%s: %s",n?" / ":"",cs_models[model].name,why);return;}
  /* Live RIFE on the 5080 ran 6.2 ms per frame for the first ~5 s and 4.4 ms from ~10 s (11-10): warm up 7 s. */

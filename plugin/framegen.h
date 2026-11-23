@@ -307,8 +307,10 @@ static int load_engine(void){
  DWORD n=GetEnvironmentVariableW(L"CS_ENGINE_DIR",engine_dir,32768);
  if(!n||n>32000)return 0;
  wchar_t dll[32768];swprintf(dll,32768,L"%ls\\consolesmooth_engine.dll",engine_dir);
+ int vk=vulkan_prepare(engine_dir);
  HMODULE m=LoadLibraryExW(dll,NULL,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);
- if(!m){logline("FG_ENGINE_LOAD_FAILED win32=%lu",GetLastError());return 0;}
+ if(!m){DWORD e=GetLastError();InterlockedExchange(&engine_load_error,e?(LONG)e:-1);logline("FG_ENGINE_LOAD_FAILED win32=%lu vulkan=%d reason=%s",e,vk,engine_load_reason());return 0;}
+ InterlockedExchange(&engine_load_error,0);logline("FG_VULKAN source=%s",vk==1?"system":vk==2?"installed copy":"none");
  *(FARPROC*)&stream_create=GetProcAddress(m,synthetic?"cs_stream_create":"cs_live_create");
  if(!synthetic)*(FARPROC*)&live_create_format=GetProcAddress(m,"cs_live_create_format");
  *(FARPROC*)&stream_tick=GetProcAddress(m,"cs_stream_tick");

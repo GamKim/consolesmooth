@@ -5,7 +5,7 @@
  * log lines. Nothing is sent anywhere. The user name is masked; the computer name is not collected.
  */
 #include <cpuid.h>
-#define CS_PLUGIN_VERSION "1.1.4"
+#define CS_PLUGIN_VERSION "1.1.5"
 static void diag_cpu(char out[49]){
  unsigned r[12]={0},eax,ebx,ecx,edx;out[0]=0;
  if(!__get_cpuid(0x80000000,&eax,&ebx,&ecx,&edx)||eax<0x80000004)return;
@@ -59,6 +59,7 @@ static void diag_system(HANDLE f,const char *user){
    snprintf(line,sizeof line,"vulkan_implicit_layer %s enabled=%d file=%s",layers[k].where,type==REG_DWORD&&data==0,path);diag_write_masked(f,line,user);count++;}
   RegCloseKey(h);}
  diag_write(f,"vulkan_implicit_layers=%d\r\n",count);
+ diag_write(f,"vulkan_loader=%s engine_load_error=%ld %s\r\n",vulkan_state==1?"system":vulkan_state==2?"installed copy":vulkan_state==0?"missing":"not checked",engine_load_error,engine_load_reason());
 }
 static HANDLE diag_create(const wchar_t *dir,const wchar_t *name,wchar_t *path,int cap){
  if(swprintf(path,cap,L"%ls\\%ls",dir,name)<0)return INVALID_HANDLE_VALUE;

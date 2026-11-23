@@ -54,3 +54,8 @@ upstream commits in third_party/PATCHES/ (rife-ncnn-vulkan.diff, ncnn.diff). Fid
 changes are described above (ffx_vk.cpp 16-byte alignment, swapchain stubbed in
 engine/ffx_swapchain_stub.cpp). Unused parts of ncnn and glslang (tests, examples, tools,
 python, documentation) are left out of this repository.
+
+1.1.5 Vulkan loader: vulkan/vulkan-1.dll 1.4.363.0 from the LunarG Vulkan Runtime components zip, unmodified,
+Copyright (c) 2015-2026 The Khronos Group Inc., LunarG, Inc., Valve Corporation; Apache-2.0 / MIT.
+Texts: vulkan/VulkanRT-License.txt and licenses/Vulkan-Headers-LICENSES (Apache-2.0). Used only when Windows has no
+vulkan-1.dll of the graphics driver.

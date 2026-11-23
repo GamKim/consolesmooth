@@ -10,6 +10,11 @@ AVerMedia와 관계없는 개인 프로젝트이며, AVerMedia의 프로그램�
 
 **시험 결과 한눈에 보기: https://gamkim.github.io/consolesmooth/** (지연·화질 측정표와 비교 영상, 페이지 안에서 바로 재생)
 
+## 1.1.5에서 바뀐 점
+
+- **`vulkan-1.dll`이 없는 PC에서도 동작하도록 했습니다.** 이 파일은 보통 그래픽 드라이버가 넣어 주는데, 없으면 엔진을 열지 못해 프레임이 전혀 생성되지 않았습니다(진단 정보의 `FG_ENGINE_LOAD_FAILED win32=126`). 이제 설치 파일에 공식 파일(LunarG)이 들어 있고, Windows에 없을 때만 씁니다. Windows 폴더는 바꾸지 않습니다. 그래픽 드라이버의 Vulkan 부분 자체가 빠진 PC는 드라이버를 다시 설치해야 합니다.
+- 엔진 파일을 열지 못하면 그 이유를 설정 창, 권장 설정 실패 화면, 진단 정보에 보여 줍니다.
+
 ## 1.1.4에서 바뀐 점
 
 - **전체 화면을 고르면 저지연 보기가 자동으로 켜져요.** 게임할 때 전체 화면만 고르면 가장 빠른 방식으로 동작합니다(창을 고르면 저지연 보기도 꺼져요).
@@ -77,7 +82,7 @@ AVerMedia와 관계없는 개인 프로젝트이며, AVerMedia의 프로그램�
 
 ## 설치
 
-[Releases](https://github.com/GamKim/consolesmooth/releases)에서 `ConsoleSmooth-Plugin-Setup-1.1.4.exe`를 받아 실행합니다. 서명이 없는 설치 파일이라 SmartScreen 경고가 나오면 "추가 정보 → 실행"을 누릅니다. 그림으로 보는 사용법: [docs/GUIDE.ko.md](docs/GUIDE.ko.md). 모든 설정 설명: [installer/INSTALL-README.txt](installer/INSTALL-README.txt).
+[Releases](https://github.com/GamKim/consolesmooth/releases)에서 `ConsoleSmooth-Plugin-Setup-1.1.5.exe`를 받아 실행합니다. 서명이 없는 설치 파일이라 SmartScreen 경고가 나오면 "추가 정보 → 실행"을 누릅니다. 그림으로 보는 사용법: [docs/GUIDE.ko.md](docs/GUIDE.ko.md). 모든 설정 설명: [installer/INSTALL-README.txt](installer/INSTALL-README.txt).
 
 ## 제거
 

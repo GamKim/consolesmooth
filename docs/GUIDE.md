@@ -20,9 +20,9 @@ Nothing on the console (Switch, PS5) is changed. Only the captured picture on yo
 
 ## 2. Download
 
-1. Download `ConsoleSmooth-Plugin-Setup-1.1.4.exe` from the [latest release](https://github.com/GamKim/consolesmooth/releases/latest).
+1. Download `ConsoleSmooth-Plugin-Setup-1.1.5.exe` from the [latest release](https://github.com/GamKim/consolesmooth/releases/latest).
 2. The installer isn't code-signed, so Windows may show a "Windows protected your PC" warning. Click **More info → Run anyway**.
-   - If you want to check the file, compare its hash with `SHA256SUMS-1.1.4.txt` on the same page (PowerShell: `Get-FileHash <file>`).
+   - If you want to check the file, compare its hash with `SHA256SUMS-1.1.5.txt` on the same page (PowerShell: `Get-FileHash <file>`).
 
 ## 3. Install
 

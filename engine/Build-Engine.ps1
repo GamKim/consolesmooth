@@ -62,6 +62,15 @@ if(-not (Test-Path (Join-Path $asrc0 'fsr31_dx12.cpp'))){Write-Warning "AMD FSR 
  foreach($f in @('amd_fidelityfx_framegeneration_dx12.dll','amd_fidelityfx_loader_dx12.dll','LICENSE.md','3rdpartynotice.md')){Copy-Item -LiteralPath (Join-Path $asrc "rt\$f") -Destination (Join-Path $dest 'engines\amdfg')}
  Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'amdfg\NOTICE-AMD-FG.txt') -Destination (Join-Path $dest 'engines\amdfg')
  New-Item -ItemType Directory -Path (Join-Path $dest 'engines\nvvfg') -Force|Out-Null;foreach($f in @('NOTICE-NVIDIA-VFG.txt','Get-NvidiaVfg.ps1')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot "nvvfg\$f") -Destination (Join-Path $dest 'engines\nvvfg')}}
+# 1.1.5: official Vulkan loader (LunarG runtime components zip) for PCs whose graphics driver left no vulkan-1.dll. Not part of
+# the source repository; the hash is the one the plugin checks (plugin/vulkan_pin.h).
+$vsrc=if($env:CS_VULKANRT_SRC){$env:CS_VULKANRT_SRC}else{'E:\fpstest\vulkanrt-1.4.363.0\x\VulkanRT-X64-1.4.363.0-Components'}
+if(-not (Test-Path (Join-Path $vsrc 'x64\vulkan-1.dll'))){Write-Warning "Vulkan runtime components not found ($vsrc): engine\vulkan is left out"}else{
+ $pin=[regex]::Match([IO.File]::ReadAllText((Join-Path $root 'plugin\vulkan_pin.h')),'CS_VULKAN_SHA256 "([0-9A-F]{64})"').Groups[1].Value
+ if((Get-FileHash -LiteralPath (Join-Path $vsrc 'x64\vulkan-1.dll') -Algorithm SHA256).Hash -ne $pin){throw 'vulkan-1.dll does not match plugin\vulkan_pin.h'}
+ New-Item -ItemType Directory -Path (Join-Path $dest 'vulkan') -Force|Out-Null
+ Copy-Item -LiteralPath (Join-Path $vsrc 'x64\vulkan-1.dll'),(Join-Path $vsrc 'VulkanRT-License.txt') -Destination (Join-Path $dest 'vulkan')
+}
 $files=@(Get-ChildItem $dest -Recurse -File | Where-Object {$_.Extension -in @('.dll','.bin','.param')})
 @($files|ForEach-Object{[ordered]@{file=$_.FullName.Substring($dest.Length+1);sha256=(Get-FileHash -LiteralPath $_.FullName).Hash}})|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $dest 'manifest.json') -Encoding UTF8
 Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $dest

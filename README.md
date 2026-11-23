@@ -10,6 +10,11 @@ This is a personal project, not affiliated with AVerMedia, and it contains no AV
 
 **Test results at a glance: https://gamkim.github.io/consolesmooth/** (latency and quality tables with the comparison videos, in Korean)
 
+## What is new in 1.1.5
+
+- **Works on PCs without `vulkan-1.dll`.** The graphics driver normally installs this file; without it the engine could not be opened and nothing was generated (`FG_ENGINE_LOAD_FAILED win32=126` in the diagnostics). The installer now includes the official file (LunarG) and uses it only when Windows has none. The Windows folder is not changed. If the Vulkan part of the graphics driver itself is missing, reinstall the driver.
+- When the engine file cannot be opened, the settings window, the failed Recommended settings page and the diagnostics say why.
+
 ## What is new in 1.1.4
 
 - **Full screen turns the low latency view on.** Pick Full screen when you play and you get the fastest path (Window turns the low latency view off).
@@ -77,7 +82,7 @@ Score of the 60 fps made from the same 30 fps input against a real 60 fps record
 
 ## Install
 
-Download `ConsoleSmooth-Plugin-Setup-1.1.4.exe` from [Releases](https://github.com/GamKim/consolesmooth/releases) and run it. The installer is not signed; if SmartScreen warns, choose "More info → Run anyway". Illustrated guide: [docs/GUIDE.md](docs/GUIDE.md). All settings: [installer/INSTALL-README-EN.txt](installer/INSTALL-README-EN.txt).
+Download `ConsoleSmooth-Plugin-Setup-1.1.5.exe` from [Releases](https://github.com/GamKim/consolesmooth/releases) and run it. The installer is not signed; if SmartScreen warns, choose "More info → Run anyway". Illustrated guide: [docs/GUIDE.md](docs/GUIDE.md). All settings: [installer/INSTALL-README-EN.txt](installer/INSTALL-README-EN.txt).
 
 ## Uninstall
 

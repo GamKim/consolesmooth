@@ -11,6 +11,7 @@
 #include "../engine/frame_limits.h"
 #include "../engine/model_catalog.h"
 #include "gpu_rule.h" /* 2.3.3 */
+#include "vulkan_load.h" /* 1.1.5 */
 static volatile LONG control_bits;
 static volatile LONG toggle_serial;
 static volatile LONG64 toggle_qpc;
@@ -654,7 +655,7 @@ static void ui_refresh(void){
  if(adaptive&&(!actualBuffer||s.ready!=1||ui_stable!=ui_saved_stable||ui_buffer!=ui_saved_buffer))wcscpy(text,ui_tr(L"버퍼 자동 · 최대 200ms",L"Buffer auto · up to 200ms"));
  else swprintf(text,512,ui_tr(L"생성 버퍼 %.1f ms%ls%ls",L"Buffer %.1f ms%ls%ls"),buffer,adaptive?ui_tr(L" · 자동",L" · auto"):L"",!ui_stable&&!ui_low_eligible?(detected.live&&detected.sn<50*detected.sd?ui_tr(L" · 30fps 입력은 다음 원본을 기다려야 해서 고정",L" · fixed at 30fps input (waits for the next frame)"):ui_tr(L" · 25ms 미만은 FHD 60→120 전용",L" · below 25ms: FHD 60→120 only")):ui_tr(L" · 클수록 지연 증가",L" · larger means more latency"));
  }else wcscpy(text,ui_tr(L"목표는 입력보다 높고 입력의 4배 이하여야 합니다.",L"Target must be above the input and at most 4× the input."));ui_text(ui_items[127],text);
- const wchar_t *state=!(bits&1)?ui_tr(L"꺼짐 · 원본 표시",L"Off · showing original"):error==-3?ui_tr(L"출력 변경 중 · 원본 표시",L"Changing output · showing original"):gpuLive&&!error?ui_tr(L"켜짐 · 빠른 방식",L"On · fast path"):error||s.ready<0?ui_tr(L"입력 또는 엔진 확인 필요",L"Check the input or engine"):s.ready==0?ui_tr(L"엔진 준비 중",L"Engine starting"):ui_tr(L"켜짐",L"On");
+ const wchar_t *state=!(bits&1)?ui_tr(L"꺼짐 · 원본 표시",L"Off · showing original"):error==-3?ui_tr(L"출력 변경 중 · 원본 표시",L"Changing output · showing original"):engine_load_reason()[0]?(vulkan_state==0?ui_tr(L"vulkan-1.dll 없음 · 그래픽 드라이버를 다시 설치하세요",L"vulkan-1.dll is missing · reinstall the graphics driver"):ui_tr(L"엔진 파일을 열 수 없음 · 다시 설치하세요",L"Engine file could not be opened · reinstall")):gpuLive&&!error?ui_tr(L"켜짐 · 빠른 방식",L"On · fast path"):error||s.ready<0?ui_tr(L"입력 또는 엔진 확인 필요",L"Check the input or engine"):s.ready==0?ui_tr(L"엔진 준비 중",L"Engine starting"):ui_tr(L"켜짐",L"On");
  if(!(bits&1))wcscpy(text,ui_tr(L"꺼짐 · 원본 표시",L"Off · showing original"));else if(!detected.provider)wcscpy(text,ui_tr(L"장치 연결 대기 · 원본 표시",L"Waiting for device · showing original"));else if(!detected.live)wcscpy(text,ui_tr(L"입력 신호 없음 · 원본 표시",L"No input signal · showing original"));else if(!detected.supported)wcscpy(text,ui_tr(L"지원 입력 확인 필요 · 원본 표시",L"Check supported input · showing original"));else swprintf(text,512,L"%.2f → %.2f fps · %ls%ls",(double)detected.sn/detected.sd,(double)detected.tn/detected.td,state,synthetic?ui_tr(L" · 합성 영상 시험",L" · synthetic video test"):L"");
  /* 2.3.18 (11-21 user): the latency belongs on this bottom status line (item 146 is not where people look). */
  if((bits&1)&&(active||gpuLive)&&GetTickCount64()-(ULONGLONG)InterlockedCompareExchange64(&cs_lat_at,0,0)<4000){size_t n=wcslen(text);swprintf(text+n,512-n,ui_tr(L" · 원본→화면 %.1f ms",L" · original→screen %.1f ms"),InterlockedCompareExchange(&cs_lat_x10,0,0)/10.0);}

@@ -18,7 +18,8 @@ ConsoleSmooth's own code is MIT licensed ([LICENSE](LICENSE)). The full notices 
 | NVIDIA DLSS Frame Generation runtime (`nvngx_dlssg.dll` 310.9.16, public NVIDIA Streamline/DLSS SDK) | NVIDIA RTX SDKs license | installer only (`engine/engines/dlssg`, with `LICENSE-NVIDIA-RTX-SDK.txt`), unmodified, not in this repository and not covered by the MIT license. This software uses NVIDIA DLSS. NVIDIA, the NVIDIA logo and DLSS are trademarks of NVIDIA Corporation. |
 | NVIDIA Video Effects SDK runtime (Video Frame Generation) | NVIDIA software license | not included; downloaded by the user from NVIDIA (`Get-NvidiaVfg.ps1`) on first use |
 | Vulkan-Headers (Khronos) | Apache-2.0 / MIT | `third_party/Vulkan-Headers` (include + licenses) |
+| Vulkan loader (`vulkan-1.dll` 1.4.363.0, LunarG Vulkan Runtime components) | Apache-2.0 / MIT | installer only (`engine/vulkan`, with `VulkanRT-License.txt`), unmodified, SHA-256 pinned in `plugin/vulkan_pin.h`; used only when the graphics driver left no `vulkan-1.dll` (1.1.5) |
 | GStreamer 1.18 / GLib | LGPL | not included; used from the user's Streaming Center installation at run time |
 | zig 0.14.1 runtime parts (libc++, libunwind, mingw-w64) | see engine/licenses | statically linked by the toolchain; the toolchain itself is downloaded by `tools/Get-Toolchain.ps1` |
 
-No AVerMedia binaries are included. The only manufacturer binaries are the AMD and NVIDIA runtimes listed above, shipped unmodified in the installer under their own licenses. AVerMedia, AMD and NVIDIA do not sponsor or endorse this project.
+No AVerMedia binaries are included. The only prebuilt third-party binaries are the AMD and NVIDIA runtimes and the Vulkan loader listed above, shipped unmodified in the installer under their own licenses. AVerMedia, AMD and NVIDIA do not sponsor or endorse this project.

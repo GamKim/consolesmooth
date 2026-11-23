@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.5 — works when the graphics driver left no vulkan-1.dll (2026-11-23)
+
+- The frame generation engine needs `vulkan-1.dll`, the Vulkan loader that normally comes with the graphics driver. On a PC without it the engine could not be opened (`FG_ENGINE_LOAD_FAILED win32=126`) and nothing was generated. The installer now includes the official loader (LunarG Vulkan Runtime 1.4.363.0, signed, unmodified) in the plugin folder. The driver's own file is always used first; the included one only when Windows has none. Nothing is written to the Windows folder, and uninstalling removes it.
+- The loader is not a driver: if the Vulkan part of the graphics driver itself is missing, the graphics driver still has to be reinstalled.
+- When the engine file cannot be opened, the settings window, the failed Recommended settings page and the diagnostics say why. In 1.1.4 they said "engine did not start in 10 s", and the retry without overlays added in 1.1.4 could not help in this case.
+- Tested on an RTX 5080 PC by making the engine unable to find the system file. Not yet tested on the PC that had the problem (RTX 3070).
+
 ## 1.1.4 — full screen is the low latency view, latency in the settings window (2026-11-21)
 
 - **Full screen turns the low latency view on.** Choosing Full screen under Frame generation tab → Display now also turns the low latency view on (and Window turns it off), so playing in full screen always uses the fastest path. Before, the two were separate switches and full screen alone used the slower path.
